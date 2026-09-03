@@ -13,7 +13,7 @@ Calculates a calibrated risk score (0-100) and aggregates contributing risk fact
 
 Generates human-in-the-loop recommendation and Final Screening Verdict.
 """
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from app.config import (
     RISK_THRESHOLD_LOW,
     RISK_THRESHOLD_MED,
@@ -29,7 +29,8 @@ def compute_risk_assessment(
     forensics_report: Dict[str, Any],
     metadata_report: Dict[str, Any],
     face_report: Dict[str, Any],
-    ocr_report: Dict[str, Any]
+    ocr_report: Dict[str, Any],
+    cross_report: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Computes transparent risk score and contributing factors breakdown.
@@ -231,6 +232,36 @@ def compute_risk_assessment(
             "name": "Missing Mandatory Identity Fields",
             "description": "Core identity attributes could not be extracted with sufficient confidence."
         })
+
+    # =========================================================================
+    # 7. CRYPTOGRAPHIC QR CODE VS PRINTED IDENTITY CROSS-VERIFICATION
+    # =========================================================================
+    if cross_report and cross_report.get("qr_decoded"):
+        if cross_report.get("has_critical_mismatch"):
+            pts = 65
+            raw_score += pts
+            mismatch_items = [
+                f"[{m['field']}] {m['explanation']}"
+                for m in cross_report.get("verification_matrix", [])
+                if m.get("status") == "MISMATCH"
+            ]
+            desc = "; ".join(mismatch_items) if mismatch_items else "Printed document surface contradicts cryptographic QR record."
+            factors.append({
+                "category": "CRYPTOGRAPHIC_QR_CONFLICT",
+                "points": pts,
+                "severity": "CRITICAL",
+                "name": "Cryptographic Identity Tampering Alert",
+                "description": desc
+            })
+        elif cross_report.get("overall_match_score", 0) >= 80.0:
+            # Verified cryptographic integrity
+            factors.append({
+                "category": "CRYPTOGRAPHIC_QR_VERIFIED",
+                "points": 0,
+                "severity": "PASS",
+                "name": "Cryptographic QR Identity Verified",
+                "description": "Printed document identity data matches cryptographic QR record."
+            })
 
     # Normalized risk score 0 - 100
     final_score = int(min(100, max(0, raw_score)))

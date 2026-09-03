@@ -199,14 +199,20 @@ def analyze_stamp_forgery(original_bgr: np.ndarray) -> Dict[str, Any]:
     }
 
 
-def analyze_photo_splice(diff_gray: np.ndarray, face_bbox: Optional[Tuple[int, int, int, int]] = None) -> Tuple[bool, float]:
+def analyze_photo_splice(
+    diff_gray: np.ndarray,
+    cv_img: Optional[np.ndarray] = None,
+    face_bbox: Optional[Tuple[int, int, int, int]] = None
+) -> Tuple[bool, float, str]:
     """
-    Compares the ELA error rate inside the facial portrait region against the surrounding card.
-    If the face region has significantly higher/lower compression error than the card background,
-    it indicates a photo replacement splice.
+    Compares the ELA recompression error rate & high-frequency noise variance
+    inside the facial portrait region against the surrounding card substrate.
+    If the face region has significantly higher/lower compression error or incompatible
+    sensor noise, it indicates a digital photo replacement splice.
     """
     if not face_bbox:
-        return False, 0.0
+        return False, 0.0, "No face bounding box provided for splice audit."
+
     x, y, w, h = face_bbox
     h_img, w_img = diff_gray.shape[:2]
 
@@ -225,8 +231,30 @@ def analyze_photo_splice(diff_gray: np.ndarray, face_bbox: Optional[Tuple[int, i
     bg_mean = float(np.mean(diff_gray[bg_mask]))
 
     ratio = face_mean / max(0.1, bg_mean)
-    is_spliced = (ratio > 2.2 and face_mean > 1.5) or (ratio < 0.35 and bg_mean > 2.0)
-    return is_spliced, round(ratio, 2)
+    is_spliced = (ratio > 2.05 and face_mean > 1.2) or (ratio < 0.35 and bg_mean > 2.0)
+
+    # Check high-frequency noise disparity if cv_img is supplied
+    noise_ratio = 1.0
+    if cv_img is not None:
+        try:
+            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            blur = cv2.GaussianBlur(gray, (5, 5), 0)
+            noise = np.abs(gray - blur)
+            face_noise = float(np.mean(noise[y:y+h, x:x+w]))
+            bg_noise = float(np.mean(noise[bg_mask]))
+            noise_ratio = face_noise / max(0.1, bg_noise)
+            if noise_ratio > 2.4 or noise_ratio < 0.32:
+                is_spliced = True
+        except Exception:
+            pass
+
+    explanation = (
+        f"Photo replacement splice detected: Portrait compression ratio ({round(ratio, 2)}x) "
+        f"and noise profile ({round(noise_ratio, 2)}x) conflict with document substrate."
+        if is_spliced else
+        f"Portrait compression ({round(ratio, 2)}x) is consistent with card surface."
+    )
+    return is_spliced, round(ratio, 2), explanation
 
 
 def run_ela_forensic_analysis(
@@ -238,9 +266,9 @@ def run_ela_forensic_analysis(
     Unified forensic screening pipeline:
     1. Error Level Analysis (ELA)
     2. Colorized Heatmap + Regional Anomaly Bounding Boxes
-    3. Facial Photo Splicing Detection
+    3. Facial Photo Splicing Detection with Visual Red Highlight Boxes
     4. Stamp Forgery & Ink Analysis (Passports & Visas)
-    5. Itemized Explainable Tamper Score (0-100%)
+    5. Annotated Evidence Overlay & Itemized Explainable Tamper Score (0-100%)
     """
     if isinstance(image_input, Image.Image):
         rgb_arr = np.array(image_input.convert("RGB"))
@@ -253,15 +281,8 @@ def run_ela_forensic_analysis(
     ela_img, diff_gray, mean_diff, max_diff = compute_ela(cv_img)
     heatmap_bgr, overlay_bgr, anomalies, tamper_pct = generate_heatmap_and_anomalies(cv_img, diff_gray)
 
-    # Convert images to base64 for frontend display
-    _, h_buf = cv2.imencode(".jpg", heatmap_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    heatmap_b64 = "data:image/jpeg;base64," + base64.b64encode(h_buf).decode("utf-8")
-
-    _, o_buf = cv2.imencode(".jpg", overlay_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-    overlay_b64 = "data:image/jpeg;base64," + base64.b64encode(o_buf).decode("utf-8")
-
     # Photo splice check
-    photo_spliced, splice_ratio = analyze_photo_splice(diff_gray, face_bbox)
+    photo_spliced, splice_ratio, splice_expl = analyze_photo_splice(diff_gray, cv_img=cv_img, face_bbox=face_bbox)
 
     # Stamp analysis (only relevant for Passports and Visas)
     if doc_type in ["PASSPORT", "VISA"]:
@@ -274,6 +295,43 @@ def run_ela_forensic_analysis(
             "reasons": ["Domestic ID (no border entry stamps expected)."]
         }
 
+    visual_tamper_boxes = []
+
+    # 1. Annotate Spliced Photo on overlay image
+    if photo_spliced and face_bbox is not None:
+        fx, fy, fw, fh = face_bbox
+        cv2.rectangle(overlay_bgr, (fx, fy), (fx + fw, fy + fh), (0, 0, 255), 3)
+        cv2.rectangle(overlay_bgr, (fx, max(0, fy - 22)), (fx + min(fw, 240), fy), (0, 0, 255), -1)
+        cv2.putText(
+            overlay_bgr,
+            "ALERT: SPLICED PHOTO",
+            (fx + 5, fy - 6),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.42,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA
+        )
+        visual_tamper_boxes.append({
+            "type": "PHOTO_SPLICE",
+            "x": int(fx), "y": int(fy), "w": int(fw), "h": int(fh),
+            "label": "Spliced / Replaced Portrait"
+        })
+
+    # 2. Add existing anomaly regions to visual tamper boxes
+    for anom in anomalies:
+        visual_tamper_boxes.append({
+            "type": "COMPRESSION_ANOMALY",
+            "x": anom["x"], "y": anom["y"], "w": anom["w"], "h": anom["h"],
+            "label": "Localized Compression Discrepancy"
+        })
+
+    # Encode images to base64 for frontend display (AFTER annotations are drawn)
+    _, h_buf = cv2.imencode(".jpg", heatmap_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    heatmap_b64 = "data:image/jpeg;base64," + base64.b64encode(h_buf).decode("utf-8")
+
+    _, o_buf = cv2.imencode(".jpg", overlay_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    overlay_b64 = "data:image/jpeg;base64," + base64.b64encode(o_buf).decode("utf-8")
 
     # Compute calibrated tamper index (0 - 100%)
     tamper_score = 0.0
@@ -286,7 +344,7 @@ def run_ela_forensic_analysis(
 
     if photo_spliced:
         tamper_score += 45.0
-        detection_reasons.append(f"Photo replacement / splice detected: Facial portrait compression ratio ({splice_ratio}x) conflicts with document surface.")
+        detection_reasons.append(splice_expl)
 
     if stamp_report["is_suspicious"]:
         tamper_score += 25.0
@@ -318,6 +376,7 @@ def run_ela_forensic_analysis(
         "risk_level": risk_level,
         "anomaly_regions_count": len(anomalies),
         "anomaly_regions": anomalies,
+        "visual_tamper_boxes": visual_tamper_boxes,
         "anomaly_percentage": tamper_pct,
         "photo_spliced": photo_spliced,
         "photo_splice_ratio": splice_ratio,

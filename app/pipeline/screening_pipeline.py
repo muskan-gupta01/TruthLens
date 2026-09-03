@@ -25,6 +25,7 @@ from app.pipeline.format_validator import validate_document_rules
 from app.pipeline.forensics_ela import run_ela_forensic_analysis
 from app.pipeline.metadata_forensics import analyze_image_metadata
 from app.pipeline.face_verifier import verify_identity_face
+from app.pipeline.cross_verifier import cross_verify_documents
 from app.pipeline.risk_engine import compute_risk_assessment
 from app.database.db_manager import log_screening
 from app.config import (
@@ -76,7 +77,7 @@ def run_truthlens_screening(
     fields = ocr_result.get("fields", {})
 
     # =========================================================================
-    # STEP 2: QR CODE DECODE (for Aadhaar, PAN, or digital visas)
+    # STEP 2: QR CODE DECODE & CRYPTOGRAPHIC CROSS-VERIFICATION
     # =========================================================================
     qr_result = detect_and_decode_qr(doc_image_input)
     if qr_result.get("detected") and qr_result.get("decoded"):
@@ -85,11 +86,14 @@ def run_truthlens_screening(
         if "uidai" in str(qr_fields.get("format", "")).lower():
             doc_type = DOC_TYPE_AADHAAR
             ocr_result["doc_type"] = DOC_TYPE_AADHAAR
-            # Fill missing OCR fields from QR if clean
+            # Fill missing OCR fields only if not present on document
             if not fields.get("id_number") and qr_fields.get("id_number"):
                 fields["id_number"] = qr_fields.get("id_number")
-            if not fields.get("name") and qr_fields.get("name"):
-                fields["name"] = qr_fields.get("name")
+            if not fields.get("dob") and qr_fields.get("dob"):
+                fields["dob"] = qr_fields.get("dob")
+
+    # Cryptographic cross-verification: Printed Document Text vs Encrypted QR Payload
+    cross_result = cross_verify_documents(ocr_result, qr_result)
 
     # =========================================================================
     # STEP 3: BIOMETRIC FACE EXTRACTION & VERIFICATION
@@ -123,7 +127,8 @@ def run_truthlens_screening(
         forensics_report=forensics_result,
         metadata_report=metadata_result,
         face_report=face_result,
-        ocr_report=ocr_result
+        ocr_report=ocr_result,
+        cross_report=cross_result
     )
 
     elapsed_ms = round((time.time() - start_time) * 1000.0, 1)
@@ -135,6 +140,20 @@ def run_truthlens_screening(
             "severity": factor["severity"],
             "text": f"[{factor['name']}] {factor['description']} (+{factor['points']} pts)"
         })
+
+    # Add QR cross-verification items to audit trail
+    if cross_result.get("qr_decoded"):
+        for m in cross_result.get("verification_matrix", []):
+            if m["status"] == "MATCH":
+                explainability.append({
+                    "severity": "PASS",
+                    "text": f"[QR Match] {m['explanation']}"
+                })
+            elif m["status"] == "MISMATCH":
+                explainability.append({
+                    "severity": "CRITICAL",
+                    "text": f"[QR Forgery Alert] {m['explanation']}"
+                })
 
     for check in validation_result.get("checklist", []):
         if check["status"] == "PASS":
@@ -183,6 +202,7 @@ def run_truthlens_screening(
         "forensics_ela": forensics_result,
         "metadata_forensics": metadata_result,
         "face_verification": face_result,
+        "cross_verification": cross_result,
         "risk_assessment": risk_report,
         "explainability": explainability
     }

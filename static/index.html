@@ -212,6 +212,22 @@
                 </div>
                 <small>Spliced photo, altered name (Interpol alert), corrupt MRZ, face mismatch</small>
               </button>
+
+              <button type="button" class="quick-demo-btn btn-scenario-1" id="btn-quick-scenario-4">
+                <div class="btn-top">
+                  <span class="badge-green">Scenario 4</span>
+                  <strong>Genuine Aadhaar (QR Verified)</strong>
+                </div>
+                <small>UIDAI Verhoeff algorithm + Cryptographic QR verified authentic (Low Risk: 6/100)</small>
+              </button>
+
+              <button type="button" class="quick-demo-btn btn-scenario-2" id="btn-quick-scenario-5">
+                <div class="btn-top">
+                  <span class="badge-red">Scenario 5</span>
+                  <strong>Tampered Aadhaar (Name Altered)</strong>
+                </div>
+                <small>Photoshop altered name vs Cryptographic QR discrepancy (High Risk: 71/100)</small>
+              </button>
             </div>
           </div>
         </div>
@@ -409,6 +425,30 @@
             <h4>ICAO Doc 9303 Machine Readable Zone (MRZ)</h4>
             <div class="mrz-lines-display" id="mrz-lines-text">P&lt;USA...</div>
             <div class="mrz-checksum-summary" id="mrz-checksum-summary"></div>
+          </div>
+
+          <!-- Cryptographic QR vs Printed Cross-Verification Box -->
+          <div class="mrz-card-box hidden" id="qr-cross-box" style="margin-top: 1.5rem; border-color: rgba(99, 102, 241, 0.4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+              <h4 style="margin: 0; color: #818CF8;">🔐 Cryptographic QR vs Printed Data Cross-Check</h4>
+              <span id="qr-cross-badge" class="badge-green">QR Verified</span>
+            </div>
+            <p style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 1rem;">
+              Cross-checks optical characters on card face against tamper-proof encrypted QR code payload (Anti-Photoshop Tamper Verification).
+            </p>
+            <table class="cyber-table" style="font-size: 0.85rem;">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Printed on Card (OCR)</th>
+                  <th>Cryptographic QR Record</th>
+                  <th>Match Status</th>
+                </tr>
+              </thead>
+              <tbody id="qr-cross-tbody">
+                <tr><td colspan="4" class="table-empty">No QR code detected.</td></tr>
+              </tbody>
+            </table>
           </div>
 
           <!-- Raw OCR Drawer -->

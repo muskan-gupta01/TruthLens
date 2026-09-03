@@ -55,6 +55,8 @@
   const btnQuickScenario1 = document.getElementById('btn-quick-scenario-1');
   const btnQuickScenario2 = document.getElementById('btn-quick-scenario-2');
   const btnQuickScenario3 = document.getElementById('btn-quick-scenario-3');
+  const btnQuickScenario4 = document.getElementById('btn-quick-scenario-4');
+  const btnQuickScenario5 = document.getElementById('btn-quick-scenario-5');
 
   // Certificate Modal
   const certModal = document.getElementById('certificate-modal');
@@ -254,6 +256,14 @@
       // Scenario 3: Tampered Passport + Impersonation
       docTypeSelect.value = 'PASSPORT';
       await loadSampleIntoIntake('demo_passport_tampered', 'demo_person_live_mismatch');
+    } else if (scenarioNumber === 4) {
+      // Scenario 4: Genuine Aadhaar (QR Verified)
+      docTypeSelect.value = 'AADHAAR';
+      await loadSampleIntoIntake('sample_genuine_aadhaar', null);
+    } else if (scenarioNumber === 5) {
+      // Scenario 5: Tampered Name Aadhaar (QR Forgery Alert)
+      docTypeSelect.value = 'AADHAAR';
+      await loadSampleIntoIntake('sample_tampered_name_aadhaar', null);
     }
 
     // Auto-initiate screening
@@ -278,6 +288,8 @@
   if (btnQuickScenario1) btnQuickScenario1.addEventListener('click', () => triggerDemoScenario(1));
   if (btnQuickScenario2) btnQuickScenario2.addEventListener('click', () => triggerDemoScenario(2));
   if (btnQuickScenario3) btnQuickScenario3.addEventListener('click', () => triggerDemoScenario(3));
+  if (btnQuickScenario4) btnQuickScenario4.addEventListener('click', () => triggerDemoScenario(4));
+  if (btnQuickScenario5) btnQuickScenario5.addEventListener('click', () => triggerDemoScenario(5));
 
   // Reset Button
   btnResetForm.addEventListener('click', () => {
@@ -439,6 +451,38 @@
         '<span class="badge-red">✕ Mathematical Check Digit Failure Detected</span>';
     } else {
       mrzBox.classList.add('hidden');
+    }
+
+    // QR Cross-Verification Display
+    const qrCrossBox = document.getElementById('qr-cross-box');
+    const qrCrossBadge = document.getElementById('qr-cross-badge');
+    const qrCrossTbody = document.getElementById('qr-cross-tbody');
+
+    if (qrCrossBox && data.cross_verification && data.cross_verification.qr_decoded) {
+      qrCrossBox.classList.remove('hidden');
+      const cv = data.cross_verification;
+      const isMismatch = cv.has_critical_mismatch;
+
+      qrCrossBadge.textContent = isMismatch ? 'CRITICAL IDENTITY CONFLICT' : `QR Verified (${cv.overall_match_score}%)`;
+      qrCrossBadge.className = isMismatch ? 'badge-red' : 'badge-green';
+
+      qrCrossTbody.innerHTML = '';
+      (cv.verification_matrix || []).forEach(row => {
+        const tr = document.createElement('tr');
+        const badge = row.status === 'MATCH'
+          ? '<span class="badge-green">MATCH</span>'
+          : (row.status === 'MISMATCH' ? '<span class="badge-red">MISMATCH (TAMPER ALERT)</span>' : '<span class="badge-yellow">MISSING</span>');
+
+        tr.innerHTML = `
+          <td><strong>${row.field}</strong></td>
+          <td>${row.ocr_val || '<em class="text-dim">N/A</em>'}</td>
+          <td>${row.qr_val || '<em class="text-dim">N/A</em>'}</td>
+          <td>${badge}<br><small style="color: #94A3B8;">${row.explanation || ''}</small></td>
+        `;
+        qrCrossTbody.appendChild(tr);
+      });
+    } else if (qrCrossBox) {
+      qrCrossBox.classList.add('hidden');
     }
   }
 

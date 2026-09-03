@@ -4,7 +4,7 @@ TruthLens - AI-Based Fake Identity & Document Screening System
 SIH26188 (Ministry of Home Affairs - Blockchain & Cybersecurity)
 
 Performs Optical Character Recognition (OCR) using pytesseract with
-specialized image preprocessing (CLAHE + Bilateral filtering).
+advanced image preprocessing (CLAHE + Bilateral filtering + Adaptive Thresholding).
 Extracts structured identity & travel fields for:
 1. Passports (Visual Inspection Zone + ICAO Doc 9303 MRZ)
 2. Visas (Visa No, Type, Country, Entry Type, Validity, Stay Duration)
@@ -37,12 +37,14 @@ if TESSERACT_PATH:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
 
-def preprocess_image_for_ocr(cv_image: np.ndarray) -> np.ndarray:
+def preprocess_image_for_ocr(cv_image: np.ndarray, binarize: bool = False) -> np.ndarray:
     """
     Applies image preprocessing to improve OCR accuracy:
     1. Grayscale conversion
-    2. Bilateral filtering (smoothes noise while keeping text edges sharp)
-    3. CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    2. Adaptive scaling (upscales small/low-res documents to optimal 1200px width)
+    3. Bilateral filtering (smoothes sensor noise while keeping text edges razor sharp)
+    4. CLAHE (Contrast Limited Adaptive Histogram Equalization)
+    5. Optional Otsu binarization for low-contrast text
     """
     if len(cv_image.shape) == 3:
         gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
@@ -50,8 +52,8 @@ def preprocess_image_for_ocr(cv_image: np.ndarray) -> np.ndarray:
         gray = cv_image.copy()
 
     h, w = gray.shape[:2]
-    if w < 1000:
-        scale = 1000.0 / w
+    if w < 1200:
+        scale = 1200.0 / w
         gray = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
 
     # Bilateral filter reduces noise while preserving text sharpness
@@ -61,16 +63,24 @@ def preprocess_image_for_ocr(cv_image: np.ndarray) -> np.ndarray:
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     enhanced = clahe.apply(denoised)
 
+    if binarize:
+        _, enhanced = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
     return enhanced
 
 
 def extract_text_and_data(image_input) -> Tuple[str, float]:
     """
-    Runs pytesseract on the preprocessed image.
+    Runs pytesseract with multi-pass recognition:
+    - Pass 1: Contrast-enhanced grayscale
+    - Pass 2: Adaptive Otsu binarization if text length is sparse
     Returns:
     - raw_text: complete extracted text string
     - mean_confidence: average OCR confidence percentage (0 - 100)
     """
+    if TESSERACT_PATH:
+        pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+
     if isinstance(image_input, Image.Image):
         cv_img = cv2.cvtColor(np.array(image_input), cv2.COLOR_RGB2BGR)
     elif isinstance(image_input, np.ndarray):
@@ -78,18 +88,42 @@ def extract_text_and_data(image_input) -> Tuple[str, float]:
     else:
         raise ValueError("Unsupported image type for OCR extraction")
 
-    preprocessed = preprocess_image_for_ocr(cv_img)
     custom_config = r"--oem 3 --psm 3"
 
     try:
+        preprocessed = preprocess_image_for_ocr(cv_img, binarize=False)
         data = pytesseract.image_to_data(preprocessed, output_type=Output.DICT, config=custom_config)
         raw_text = pytesseract.image_to_string(preprocessed, config=custom_config)
+
+        # If Pass 1 yielded very sparse text, run Pass 2 with Otsu binarization
+        if len(raw_text.strip()) < 25:
+            preprocessed_b = preprocess_image_for_ocr(cv_img, binarize=True)
+            text_pass2 = pytesseract.image_to_string(preprocessed_b, config=custom_config)
+            if len(text_pass2.strip()) > len(raw_text.strip()):
+                raw_text = text_pass2
+                data = pytesseract.image_to_data(preprocessed_b, output_type=Output.DICT, config=custom_config)
+
+        # If still sparse (< 25 chars), test phone camera rotations (90°, 180°, 270°)
+        if len(raw_text.strip()) < 25:
+            rot_angles = [
+                cv2.ROTATE_90_CLOCKWISE,
+                cv2.ROTATE_180,
+                cv2.ROTATE_90_COUNTERCLOCKWISE
+            ]
+            for rot_flag in rot_angles:
+                rotated_cv = cv2.rotate(cv_img, rot_flag)
+                prep_rot = preprocess_image_for_ocr(rotated_cv, binarize=False)
+                txt_rot = pytesseract.image_to_string(prep_rot, config=custom_config)
+                if len(txt_rot.strip()) > len(raw_text.strip()) + 15:
+                    raw_text = txt_rot
+                    data = pytesseract.image_to_data(prep_rot, output_type=Output.DICT, config=custom_config)
+                    break
 
         confidences = [
             int(conf) for conf in data["conf"]
             if conf != "-1" and str(conf).isdigit() and int(conf) > 0
         ]
-        mean_conf = float(np.mean(confidences)) if confidences else 65.0
+        mean_conf = float(np.mean(confidences)) if confidences else 80.0
         return raw_text, round(mean_conf, 1)
 
     except Exception as e:
@@ -99,7 +133,8 @@ def extract_text_and_data(image_input) -> Tuple[str, float]:
 
 def identify_document_type(text: str, user_hint: Optional[str] = None) -> str:
     """
-    Determines document type based on characteristic institutional keywords or user hint.
+    Determines document type based on characteristic institutional keywords,
+    official formats, checksums, or user hint.
     """
     if user_hint and user_hint in [
         DOC_TYPE_PASSPORT, DOC_TYPE_VISA, DOC_TYPE_DRIVING_LICENSE,
@@ -116,7 +151,7 @@ def identify_document_type(text: str, user_hint: Optional[str] = None) -> str:
     ]
     visa_keywords = [
         "VISA", "VALID FOR", "ENTRIES", "DURATION OF STAY", "TYPE OF VISA",
-        "SCHENGEN", "STAY DURATION", "ENTRY TYPE", "VALID FROM", "VALID UNTIL"
+        "SCHENGEN", "STAY DURATION", "ENTRY TYPE", "VALID FROM", "VALID UNTIL", "V<"
     ]
     dl_keywords = [
         "DRIVING LICENCE", "DRIVING LICENSE", "MOTOR VEHICLES", "TRANSPORT",
@@ -135,21 +170,25 @@ def identify_document_type(text: str, user_hint: Optional[str] = None) -> str:
     ]
 
     scores = {
-        DOC_TYPE_PASSPORT: sum(2 for kw in passport_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_VISA: sum(2 for kw in visa_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_DRIVING_LICENSE: sum(2 for kw in dl_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_PERMIT: sum(2 for kw in permit_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_AADHAAR: sum(1 for kw in aadhaar_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_PAN: sum(1 for kw in pan_keywords if kw in text_upper or kw in clean_norm)
+        DOC_TYPE_PASSPORT: sum(3 for kw in passport_keywords if kw in text_upper or kw in clean_norm),
+        DOC_TYPE_VISA: sum(3 for kw in visa_keywords if kw in text_upper or kw in clean_norm),
+        DOC_TYPE_DRIVING_LICENSE: sum(3 for kw in dl_keywords if kw in text_upper or kw in clean_norm),
+        DOC_TYPE_PERMIT: sum(3 for kw in permit_keywords if kw in text_upper or kw in clean_norm),
+        DOC_TYPE_AADHAAR: sum(3 for kw in aadhaar_keywords if kw in text_upper or kw in clean_norm),
+        DOC_TYPE_PAN: sum(3 for kw in pan_keywords if kw in text_upper or kw in clean_norm)
     }
 
-    # Regex boost
-    if re.search(r"P<[A-Z0-9<]{40,}", text):
-        scores[DOC_TYPE_PASSPORT] += 6
+    # High-confidence Regex pattern boost
+    if re.search(r"P<[A-Z0-9<]{30,}", text):
+        scores[DOC_TYPE_PASSPORT] += 10
     if re.search(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b", text_upper):
-        scores[DOC_TYPE_PAN] += 4
+        scores[DOC_TYPE_PAN] += 8
     if re.search(r"\b[2-9]\d{3}\s\d{4}\s\d{4}\b", text):
-        scores[DOC_TYPE_AADHAAR] += 4
+        scores[DOC_TYPE_AADHAAR] += 8
+    elif re.search(r"\b\d{4}\s\d{4}\s\d{4}\b", text):
+        scores[DOC_TYPE_AADHAAR] += 6
+    if re.search(r"V<[A-Z0-9<]{30,}", text):
+        scores[DOC_TYPE_VISA] += 10
 
     best_type = max(scores, key=scores.get)
     if scores[best_type] >= 2:
@@ -332,8 +371,10 @@ def parse_permit_fields(text: str) -> Dict[str, Any]:
 
 
 def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
-    """Extracts Aadhaar fields."""
+    """Extracts Aadhaar fields (ID Number, Name, DOB, Gender)."""
     fields: Dict[str, Any] = {"id_number": None, "dob": None, "gender": None, "name": None}
+
+    # 1. 12-digit Aadhaar Number (standard 4 4 4 grouping or continuous)
     id_match = re.search(r"\b([2-9]\d{3}\s\d{4}\s\d{4})\b", text)
     if id_match:
         fields["id_number"] = id_match.group(1).strip()
@@ -341,39 +382,104 @@ def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
         m12 = re.search(r"\b(\d{4}\s\d{4}\s\d{4})\b", text)
         if m12:
             fields["id_number"] = m12.group(1).strip()
+        else:
+            m_cont = re.search(r"\b([2-9]\d{11})\b", text)
+            if m_cont:
+                raw_id = m_cont.group(1)
+                fields["id_number"] = f"{raw_id[:4]} {raw_id[4:8]} {raw_id[8:]}"
 
-    dob_m = re.search(r"(?:DOB|Date of Birth|Birth)[\s:]*(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})", text, re.IGNORECASE)
+    # 2. Date of Birth
+    dob_m = re.search(r"(?:DOB|Date of Birth|Birth|Dos|DO8)[\s:/=>]*(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})", text, re.IGNORECASE)
     if dob_m:
         fields["dob"] = dob_m.group(1)
     else:
         d_fb = re.search(r"\b(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})\b", text)
         if d_fb:
             fields["dob"] = d_fb.group(1)
+        else:
+            yob = re.search(r"(?:Year of Birth|YOB)[\s:/=>]*(\d{4})", text, re.IGNORECASE)
+            if yob:
+                fields["dob"] = f"01/01/{yob.group(1)}"
 
+    # 3. Gender
     if re.search(r"\b(MALE|PURUSH)\b", text, re.IGNORECASE):
         fields["gender"] = "MALE"
     elif re.search(r"\b(FEMALE|MAHILA)\b", text, re.IGNORECASE):
         fields["gender"] = "FEMALE"
+    elif re.search(r"\b(TRANSGENDER)\b", text, re.IGNORECASE):
+        fields["gender"] = "TRANSGENDER"
 
-    # Name extraction
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    for line in lines:
-        if len(line) > 3 and not any(k in line.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "MALE", "FEMALE"]):
-            if re.match(r"^[A-Za-z\s]{3,30}$", line):
-                fields["name"] = line
-                break
+    # 4. Name extraction
+    # Strategy A: Direct label match "Name: <name>" or "Name\n<name>"
+    nm_match = re.search(r"(?:Name|Naam)[\s:/=>]*\n?([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
+    if nm_match:
+        cand = nm_match.group(1).strip()
+        # Ensure candidate is not a common label or header
+        if not any(k in cand.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "MALE", "FEMALE", "UIDAI"]):
+            fields["name"] = cand
+
+    # Strategy B: Line inspection with symbol stripping
+    if not fields["name"]:
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        for i, line in enumerate(lines):
+            # Look for line containing 'Name' and inspect subsequent line
+            if re.search(r"\bName\b", line, re.IGNORECASE):
+                for next_l in lines[i+1:i+4]:
+                    cand = re.sub(r"^[^A-Za-z]+", "", next_l).strip()
+                    if cand and len(cand) >= 3 and not any(k in cand.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "GENDER", "MALE", "FEMALE", "UIDAI"]):
+                        if re.match(r"^[A-Za-z][A-Za-z ]{2,30}$", cand):
+                            fields["name"] = cand
+                            break
+                if fields["name"]:
+                    break
+
+    # Strategy C: First proper name before DOB/Gender
+    if not fields["name"]:
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        for line in lines:
+            clean_l = re.sub(r"^[^A-Za-z]+", "", line).strip()
+            if len(clean_l) > 3 and not any(k in clean_l.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "MALE", "FEMALE", "UIDAI", "AUTHORITY", "PEHCHAN"]):
+                if re.match(r"^[A-Za-z][A-Za-z ]{2,30}$", clean_l):
+                    fields["name"] = clean_l
+                    break
+
     return fields
 
 
 def parse_pan_fields(text: str) -> Dict[str, Any]:
-    """Extracts PAN fields."""
+    """Extracts PAN fields (PAN ID, Name, Father's Name, DOB)."""
     fields: Dict[str, Any] = {"id_number": None, "name": None, "father_name": None, "dob": None, "gender": None}
+
+    # 1. 10-character PAN Number
     pan_m = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])\b", text.upper())
     if pan_m:
         fields["id_number"] = pan_m.group(1)
+
+    # 2. Date of Birth
     dob_m = re.search(r"\b(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})\b", text)
     if dob_m:
         fields["dob"] = dob_m.group(1)
+
+    # 3. Name (follows 'Name' label)
+    nm = re.search(r"(?:Name)\s*\n+([A-Za-z][A-Za-z ]{2,30})\s*(?:\n|$)", text, re.IGNORECASE)
+    if nm:
+        cand = nm.group(1).strip()
+        if not any(k in cand.upper() for k in ["INCOME", "TAX", "DEPARTMENT", "INDIA", "PERMANENT", "ACCOUNT", "NUMBER"]):
+            fields["name"] = cand
+    if not fields["name"]:
+        nm_inline = re.search(r"(?:Name)[\s:]*([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
+        if nm_inline:
+            cand = nm_inline.group(1).strip()
+            if not any(k in cand.upper() for k in ["INCOME", "TAX", "DEPARTMENT", "INDIA", "PERMANENT", "ACCOUNT", "NUMBER"]):
+                fields["name"] = cand
+
+    # 4. Father's Name
+    fn = re.search(r"(?:Father[\'s]*\s*Name)\s*\n*([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
+    if fn:
+        cand = fn.group(1).strip()
+        if not any(k in cand.upper() for k in ["INCOME", "TAX", "DEPARTMENT", "INDIA", "DATE", "BIRTH"]):
+            fields["father_name"] = cand
+
     return fields
 
 
@@ -383,10 +489,11 @@ def extract_document_fields(
 ) -> Dict[str, Any]:
     """
     High-level OCR extraction orchestrator:
-    1. Preprocesses image and runs OCR
+    1. Preprocesses image and runs multi-pass OCR
     2. Scans for ICAO Doc 9303 MRZ lines
     3. Identifies document type (or applies user hint)
-    4. Extracts structured identity/travel fields with fallbacks
+    4. Extracts structured identity/travel fields with robust fallbacks
+    5. Returns unified dictionary with full field coverage
     """
     raw_text, conf = extract_text_and_data(image_input)
     mrz_result = find_and_parse_mrz(raw_text)
@@ -395,6 +502,30 @@ def extract_document_fields(
     detected_type = identify_document_type(raw_text, user_hint=doc_type_hint)
     if mrz_result and mrz_result.get("valid_structure") and detected_type == DOC_TYPE_UNKNOWN:
         detected_type = DOC_TYPE_PASSPORT
+
+    # Multi-orientation fallback: if document is UNKNOWN, test 90, 180, 270 degree rotations
+    if detected_type == DOC_TYPE_UNKNOWN:
+        if isinstance(image_input, Image.Image):
+            cv_base = cv2.cvtColor(np.array(image_input), cv2.COLOR_RGB2BGR)
+        elif isinstance(image_input, np.ndarray):
+            cv_base = image_input.copy()
+        else:
+            cv_base = None
+
+        if cv_base is not None:
+            for rot_flag in [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE]:
+                rot_cv = cv2.rotate(cv_base, rot_flag)
+                t_rot, c_rot = extract_text_and_data(rot_cv)
+                m_rot = find_and_parse_mrz(t_rot)
+                dt_rot = identify_document_type(t_rot, user_hint=doc_type_hint)
+                if m_rot and m_rot.get("valid_structure") and dt_rot == DOC_TYPE_UNKNOWN:
+                    dt_rot = DOC_TYPE_PASSPORT
+                if dt_rot != DOC_TYPE_UNKNOWN:
+                    raw_text = t_rot
+                    conf = c_rot
+                    mrz_result = m_rot
+                    detected_type = dt_rot
+                    break
 
     fields: Dict[str, Any] = {}
 
@@ -420,7 +551,10 @@ def extract_document_fields(
     return {
         "raw_text": raw_text,
         "mean_confidence": conf,
+        "ocr_confidence": conf,
+        "confidence": conf,
         "doc_type": detected_type,
+        "document_type": detected_type,
         "fields": fields,
         "mrz": mrz_result
     }

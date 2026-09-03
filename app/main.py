@@ -194,6 +194,16 @@ async def list_sample_documents():
             "matching_live_portrait": None
         },
         {
+            "id": "sample_tampered_name_aadhaar",
+            "title": "Tampered Aadhaar (Altered Printed Name)",
+            "doc_type": "AADHAAR",
+            "expected_verdict": "HIGH RISK / SUSPICIOUS DOCUMENT",
+            "description": "Photoshop altered printed name 'Vikram Mehta' contradicts cryptographic QR record 'Aakash Verma'.",
+            "badge_color": "rose",
+            "filename": "sample_tampered_name_aadhaar.jpg",
+            "matching_live_portrait": None
+        },
+        {
             "id": "sample_genuine_pan",
             "title": "Genuine Income Tax PAN Card",
             "doc_type": "PAN",
