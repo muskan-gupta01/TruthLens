@@ -167,7 +167,12 @@ def run_truthlens_screening(
     risk_level = risk_report["level"]
     risk_score = risk_report["score"]
 
-    if risk_level == "LOW":
+    name_val = fields.get("full_name") or fields.get("name")
+    num_val = fields.get("passport_number") or fields.get("visa_number") or fields.get("id_number")
+
+    if doc_type == DOC_TYPE_UNKNOWN or (not name_val and not num_val):
+        summary = f"INCOMPLETE SCREENING: Document could not be recognized as a valid institutional identity format (Risk Score: {risk_score}/100)."
+    elif risk_level == "LOW":
         summary = f"Document verified authentic across optical, mathematical, and forensic checks (Risk Score: {risk_score}/100)."
     elif risk_level == "MEDIUM":
         summary = f"Review recommended: Document flagged with {len(risk_report['factors'])} minor warning(s) (Risk Score: {risk_score}/100)."

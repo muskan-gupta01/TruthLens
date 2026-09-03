@@ -52,15 +52,19 @@ def preprocess_image_for_ocr(cv_image: np.ndarray, binarize: bool = False) -> np
         gray = cv_image.copy()
 
     h, w = gray.shape[:2]
-    if w < 1200:
+    # Optimal OCR resolution: width between 1100px and 1600px
+    if w > 1650:
+        scale = 1500.0 / w
+        gray = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    elif w < 1100:
         scale = 1200.0 / w
         gray = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
 
-    # Bilateral filter reduces noise while preserving text sharpness
+    # Bilateral filter reduces sensor noise while keeping text edges razor sharp
     denoised = cv2.bilateralFilter(gray, 9, 75, 75)
 
     # Adaptive histogram equalization (CLAHE) for high local contrast
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8))
     enhanced = clahe.apply(denoised)
 
     if binarize:
@@ -72,8 +76,10 @@ def preprocess_image_for_ocr(cv_image: np.ndarray, binarize: bool = False) -> np
 def extract_text_and_data(image_input) -> Tuple[str, float]:
     """
     Runs pytesseract with multi-pass recognition:
-    - Pass 1: Contrast-enhanced grayscale
-    - Pass 2: Adaptive Otsu binarization if text length is sparse
+    - Pass 1: Contrast-enhanced grayscale with PSM 3
+    - Pass 2: Sparse text recovery with PSM 11
+    - Pass 3: Adaptive Otsu binarization
+    - Pass 4: Multi-angle rotation testing (90°, 180°, 270°)
     Returns:
     - raw_text: complete extracted text string
     - mean_confidence: average OCR confidence percentage (0 - 100)
@@ -95,12 +101,19 @@ def extract_text_and_data(image_input) -> Tuple[str, float]:
         data = pytesseract.image_to_data(preprocessed, output_type=Output.DICT, config=custom_config)
         raw_text = pytesseract.image_to_string(preprocessed, config=custom_config)
 
-        # If Pass 1 yielded very sparse text, run Pass 2 with Otsu binarization
+        # If Pass 1 is sparse, test PSM 11 (Sparse text recovery)
+        if len(raw_text.strip()) < 25:
+            sparse_text = pytesseract.image_to_string(preprocessed, config=r"--oem 3 --psm 11")
+            if len(sparse_text.strip()) > len(raw_text.strip()):
+                raw_text = sparse_text
+                data = pytesseract.image_to_data(preprocessed, output_type=Output.DICT, config=r"--oem 3 --psm 11")
+
+        # If still sparse, run Pass 3 with Otsu binarization
         if len(raw_text.strip()) < 25:
             preprocessed_b = preprocess_image_for_ocr(cv_img, binarize=True)
-            text_pass2 = pytesseract.image_to_string(preprocessed_b, config=custom_config)
-            if len(text_pass2.strip()) > len(raw_text.strip()):
-                raw_text = text_pass2
+            text_pass3 = pytesseract.image_to_string(preprocessed_b, config=custom_config)
+            if len(text_pass3.strip()) > len(raw_text.strip()):
+                raw_text = text_pass3
                 data = pytesseract.image_to_data(preprocessed_b, output_type=Output.DICT, config=custom_config)
 
         # If still sparse (< 25 chars), test phone camera rotations (90°, 180°, 270°)
@@ -114,16 +127,23 @@ def extract_text_and_data(image_input) -> Tuple[str, float]:
                 rotated_cv = cv2.rotate(cv_img, rot_flag)
                 prep_rot = preprocess_image_for_ocr(rotated_cv, binarize=False)
                 txt_rot = pytesseract.image_to_string(prep_rot, config=custom_config)
-                if len(txt_rot.strip()) > len(raw_text.strip()) + 15:
+                if len(txt_rot.strip()) < 20:
+                    txt_rot_sparse = pytesseract.image_to_string(prep_rot, config=r"--oem 3 --psm 11")
+                    if len(txt_rot_sparse.strip()) > len(txt_rot.strip()):
+                        txt_rot = txt_rot_sparse
+                if len(txt_rot.strip()) > len(raw_text.strip()) + 12:
                     raw_text = txt_rot
                     data = pytesseract.image_to_data(prep_rot, output_type=Output.DICT, config=custom_config)
                     break
 
+        if not raw_text.strip():
+            return "", 0.0
+
         confidences = [
-            int(conf) for conf in data["conf"]
+            int(conf) for conf in data.get("conf", [])
             if conf != "-1" and str(conf).isdigit() and int(conf) > 0
         ]
-        mean_conf = float(np.mean(confidences)) if confidences else 80.0
+        mean_conf = float(np.mean(confidences)) if confidences else 75.0
         return raw_text, round(mean_conf, 1)
 
     except Exception as e:

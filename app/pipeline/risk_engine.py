@@ -221,9 +221,22 @@ def compute_risk_assessment(
     fields = ocr_report.get("fields", {})
     name = fields.get("full_name") or fields.get("name")
     doc_id = fields.get("passport_number") or fields.get("visa_number") or fields.get("id_number")
+    doc_type = ocr_report.get("doc_type", "UNKNOWN")
 
-    if not name or not doc_id:
-        pts = 10
+    is_unrecognized = (doc_type == "UNKNOWN") or (not name and not doc_id)
+
+    if is_unrecognized:
+        pts = 45
+        raw_score += pts
+        factors.append({
+            "category": "UNRECOGNIZED_DOCUMENT",
+            "points": pts,
+            "severity": "HIGH",
+            "name": "Unrecognized Document Type / Empty Extraction",
+            "description": "System could not identify a valid travel/identity format. Mandatory attributes (Name, Document ID) could not be extracted."
+        })
+    elif not name or not doc_id:
+        pts = 15
         raw_score += pts
         factors.append({
             "category": "MISSING_FIELDS",
@@ -267,7 +280,11 @@ def compute_risk_assessment(
     final_score = int(min(100, max(0, raw_score)))
 
     # Risk level classification
-    if final_score <= RISK_THRESHOLD_LOW:
+    if is_unrecognized:
+        risk_level = "HIGH" if final_score >= 60 else "MEDIUM"
+        verdict = VERDICT_HIGH_RISK if final_score >= 60 else "NEEDS MANUAL REVIEW"
+        officer_rec = "UNVERIFIED INTAKE: Document type unrecognized or illegible. Mandatory identity fields missing. Officer must conduct manual physical inspection and re-scan under proper lighting."
+    elif final_score <= RISK_THRESHOLD_LOW:
         risk_level = "LOW"
         verdict = VERDICT_VERIFIED
         officer_rec = "Clear for transit. Document verified authentic across optical, mathematical, and forensic layers."
