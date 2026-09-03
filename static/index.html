@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TruthLens — AI-Based Fake Identity & Document Screening System (SIH26188)</title>
+  <meta name="description" content="AI-Based Fake Identity & Document Screening System for Border Checkpoints (SIH26188). Autonomous screening combining OCR, ICAO 9303 MRZ, Verhoeff checksums, Error Level Analysis (ELA), and 1:1 Biometric Face Verification." />
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/css/style.css?v=3.0" />
+</head>
+<body>
+  <!-- Ambient Cyber Background -->
+  <div class="cyber-grid"></div>
+  <div class="glow-orb glow-teal"></div>
+  <div class="glow-orb glow-blue"></div>
+
+  <!-- Top Security Masthead -->
+  <header class="masthead">
+    <div class="header-container">
+      <div class="brand-group">
+        <div class="crest-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <circle cx="12" cy="11" r="3" stroke-width="2"/>
+            <path d="M12 8v-1"/>
+            <path d="M12 15v-1"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title-row">
+            <span class="brand-name">TruthLens</span>
+            <span class="version-tag">v2.0-BORDER</span>
+          </div>
+          <p class="brand-subtitle">AI-Based Fake Identity &amp; Travel Document Screening System</p>
+        </div>
+      </div>
+
+      <div class="badge-cluster">
+        <div class="gov-pill">
+          <span class="flag-dot"></span>
+          <span>SIH26188 • Ministry of Home Affairs</span>
+        </div>
+        <div class="cyber-pill">
+          <span class="pulse-dot"></span>
+          <span id="system-status-text">SYSTEM ONLINE</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tab Bar (10 Dedicated Sections) -->
+  <nav class="nav-bar">
+    <div class="nav-container">
+      <button type="button" class="nav-tab active" data-tab="tab-dashboard">
+        <span class="nav-icon">📊</span> Dashboard
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-screening">
+        <span class="nav-icon">🛡️</span> Document Screening
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-ocr">
+        <span class="nav-icon">📄</span> OCR Results
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-validation">
+        <span class="nav-icon">⚖️</span> Validation Rules
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-tampering">
+        <span class="nav-icon">🔬</span> Tampering Analysis
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-face">
+        <span class="nav-icon">👤</span> Face Verification
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-risk">
+        <span class="nav-icon">⚡</span> Risk Assessment
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-history">
+        <span class="nav-icon">🕒</span> Screening History
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-mockdb">
+        <span class="nav-icon">🗄️</span> Mock Database
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-system">
+        <span class="nav-icon">ℹ️</span> System Info
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="main-wrapper">
+
+    <!-- ================================================================= -->
+    <!-- TAB 1: DASHBOARD OVERVIEW                                         -->
+    <!-- ================================================================= -->
+    <section id="tab-dashboard" class="tab-pane active">
+      <div class="section-intro">
+        <h1 class="page-title">Border Checkpoint Command Center</h1>
+        <p class="page-desc">
+          Live monitoring of passenger document screenings, automated risk distributions, and forensic activity across border security terminals.
+        </p>
+      </div>
+
+      <!-- KPI Stat Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon icon-blue">📂</div>
+          <div class="kpi-details">
+            <span class="kpi-label">Total Screened</span>
+            <span class="kpi-value" id="kpi-total">0</span>
+            <span class="kpi-meta">All travel documents</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-green">✓</div>
+          <div class="kpi-details">
+            <span class="kpi-label">Verified (Low Risk)</span>
+            <span class="kpi-value kpi-verified" id="kpi-verified">0</span>
+            <span class="kpi-meta">Cleared for transit</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-yellow">⚠</div>
+          <div class="kpi-details">
+            <span class="kpi-label">Manual Review</span>
+            <span class="kpi-value kpi-review" id="kpi-review">0</span>
+            <span class="kpi-meta">Secondary inspection</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-red">✕</div>
+          <div class="kpi-details">
+            <span class="kpi-label">High / Critical Risk</span>
+            <span class="kpi-value kpi-highrisk" id="kpi-highrisk">0</span>
+            <span class="kpi-meta">Security alerts / rejected</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk Distribution & Quick Action -->
+      <div class="dashboard-split">
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>📈 Risk Distribution Overview</h3>
+            <span class="badge-tech">Dynamic Audit</span>
+          </div>
+          <div class="card-body">
+            <div class="risk-dist-bars">
+              <div class="dist-row">
+                <span class="dist-label">Low Risk (0–29)</span>
+                <div class="dist-bar-track">
+                  <div class="dist-bar-fill bar-green" id="dist-bar-low" style="width: 0%"></div>
+                </div>
+                <span class="dist-count" id="dist-count-low">0</span>
+              </div>
+              <div class="dist-row">
+                <span class="dist-label">Medium Risk (30–59)</span>
+                <div class="dist-bar-track">
+                  <div class="dist-bar-fill bar-yellow" id="dist-bar-med" style="width: 0%"></div>
+                </div>
+                <span class="dist-count" id="dist-count-med">0</span>
+              </div>
+              <div class="dist-row">
+                <span class="dist-label">High Risk (60–79)</span>
+                <div class="dist-bar-track">
+                  <div class="dist-bar-fill bar-orange" id="dist-bar-high" style="width: 0%"></div>
+                </div>
+                <span class="dist-count" id="dist-count-high">0</span>
+              </div>
+              <div class="dist-row">
+                <span class="dist-label">Critical Risk (80–100)</span>
+                <div class="dist-bar-track">
+                  <div class="dist-bar-fill bar-red" id="dist-bar-critical" style="width: 0%"></div>
+                </div>
+                <span class="dist-count" id="dist-count-critical">0</span>
+              </div>
+            </div>
+            <p class="chart-caption">Aggregated from local SQLite screening audit records.</p>
+          </div>
+        </div>
+
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>⚡ Quick Demonstration Scenarios</h3>
+            <span class="badge-judges">Hackathon Mode</span>
+          </div>
+          <div class="card-body">
+            <p class="card-desc">Click to immediately execute pre-packaged test cases:</p>
+            <div class="demo-quick-buttons">
+              <button type="button" class="quick-demo-btn btn-scenario-1" id="btn-quick-scenario-1">
+                <div class="btn-top">
+                  <span class="badge-green">Scenario 1</span>
+                  <strong>Genuine Passport + Face Match</strong>
+                </div>
+                <small>Authentic US Passport, valid MRZ, matching live face (Low Risk: 6/100)</small>
+              </button>
+
+              <button type="button" class="quick-demo-btn btn-scenario-2" id="btn-quick-scenario-2">
+                <div class="btn-top">
+                  <span class="badge-red">Scenario 2</span>
+                  <strong>Expired Visa (Watchlist Alert)</strong>
+                </div>
+                <small>Expired Schengen tourist visa, overstay alert in mock database (High Risk)</small>
+              </button>
+
+              <button type="button" class="quick-demo-btn btn-scenario-3" id="btn-quick-scenario-3">
+                <div class="btn-top">
+                  <span class="badge-red">Scenario 3</span>
+                  <strong>Tampered Passport + Impersonation</strong>
+                </div>
+                <small>Spliced photo, altered name (Interpol alert), corrupt MRZ, face mismatch</small>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 2: DOCUMENT SCREENING & INTAKE                                -->
+    <!-- ================================================================= -->
+    <section id="tab-screening" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Document &amp; Identity Intake</h1>
+        <p class="page-desc">
+          Upload any travel document (Passport, Visa, National ID, Driving License, Permit) and optional passenger live photo or webcam snapshot to initiate screening.
+        </p>
+      </div>
+
+      <!-- Interactive 7-Step Pipeline Tracker -->
+      <div class="pipeline-tracker">
+        <div class="pipeline-step active" data-step="1">
+          <span class="step-num">1</span>
+          <span class="step-title">Upload</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" data-step="2">
+          <span class="step-num">2</span>
+          <span class="step-title">OCR &amp; MRZ</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" data-step="3">
+          <span class="step-num">3</span>
+          <span class="step-title">Validation</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" data-step="4">
+          <span class="step-num">4</span>
+          <span class="step-title">Tampering</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" data-step="5">
+          <span class="step-num">5</span>
+          <span class="step-title">Face Match</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" data-step="6">
+          <span class="step-num">6</span>
+          <span class="step-title">Risk Engine</span>
+        </div>
+        <div class="pipeline-arrow">→</div>
+        <div class="pipeline-step" data-step="7">
+          <span class="step-num">7</span>
+          <span class="step-title">Final Verdict</span>
+        </div>
+      </div>
+
+      <!-- Screening Controls & Intake Grid -->
+      <div class="intake-grid">
+        <!-- Document Upload Column -->
+        <div class="intake-card">
+          <div class="card-header">
+            <h3>1. Identity / Travel Document</h3>
+            <span class="badge-tech">Mandatory</span>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label for="doc-type-select" class="form-label">Document Type Specification:</label>
+              <select id="doc-type-select" class="form-select">
+                <option value="AUTO">Auto-Detect (Passport / Visa / ID / DL)</option>
+                <option value="PASSPORT">Passport (ICAO Doc 9303)</option>
+                <option value="VISA">Entry / Transit Visa</option>
+                <option value="AADHAAR">UIDAI Aadhaar Card</option>
+                <option value="PAN">Income Tax PAN Card</option>
+                <option value="DRIVING_LICENSE">Driving License</option>
+                <option value="PERMIT">Travel / Residence Permit</option>
+              </select>
+            </div>
+
+            <!-- Drag & Drop Dropzone -->
+            <div class="dropzone" id="doc-dropzone">
+              <input type="file" id="doc-file-input" accept="image/jpeg,image/png,image/jpg" class="file-input-hidden" />
+              <div class="dropzone-content" id="doc-dropzone-content">
+                <div class="drop-icon">📤</div>
+                <h4 class="drop-title">Drop travel document image here</h4>
+                <p class="drop-sub">or click to browse files (JPEG, PNG • Max 10MB)</p>
+              </div>
+              <div class="preview-box hidden" id="doc-preview-box">
+                <img id="doc-preview-img" src="" alt="Document Preview" />
+                <button type="button" class="btn-clear-img" id="btn-clear-doc" title="Remove image">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Passenger Photo / Webcam Column -->
+        <div class="intake-card">
+          <div class="card-header">
+            <h3>2. Live Passenger Photo (Module 4)</h3>
+            <span class="badge-tech">Biometric 1:1</span>
+          </div>
+          <div class="card-body">
+            <div class="live-input-toggle">
+              <button type="button" class="toggle-btn active" id="btn-mode-upload">Upload File</button>
+              <button type="button" class="toggle-btn" id="btn-mode-webcam">Live Webcam</button>
+            </div>
+
+            <!-- File Upload for Live Face -->
+            <div class="dropzone" id="live-dropzone">
+              <input type="file" id="live-file-input" accept="image/jpeg,image/png,image/jpg" class="file-input-hidden" />
+              <div class="dropzone-content" id="live-dropzone-content">
+                <div class="drop-icon">👤</div>
+                <h4 class="drop-title">Drop live passenger photo</h4>
+                <p class="drop-sub">Frontal facial portrait for 1:1 biometric comparison</p>
+              </div>
+              <div class="preview-box hidden" id="live-preview-box">
+                <img id="live-preview-img" src="" alt="Live Face Preview" />
+                <button type="button" class="btn-clear-img" id="btn-clear-live" title="Remove image">✕</button>
+              </div>
+            </div>
+
+            <!-- Webcam Viewfinder (Initially Hidden) -->
+            <div class="webcam-box hidden" id="webcam-container">
+              <video id="webcam-video" autoplay playsinline></video>
+              <div class="webcam-controls">
+                <button type="button" class="cyber-btn btn-secondary" id="btn-webcam-snap">📸 Capture Snapshot</button>
+                <button type="button" class="cyber-btn btn-outline" id="btn-webcam-cancel">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Button & Screening Progress -->
+      <div class="action-bar">
+        <button type="button" class="cyber-btn btn-primary" id="btn-start-screening">
+          <span class="btn-icon">⚡</span>
+          <span>Initiate Full AI Screening Pipeline</span>
+        </button>
+        <button type="button" class="cyber-btn btn-outline" id="btn-reset-form">
+          <span>Reset Form</span>
+        </button>
+      </div>
+
+      <!-- In-Progress Spinner Banner -->
+      <div class="processing-banner hidden" id="processing-banner">
+        <div class="scanner-laser"></div>
+        <div class="processing-content">
+          <div class="cyber-spinner"></div>
+          <div class="processing-text">
+            <h4 id="processing-status-title">Executing Deep Document Analysis...</h4>
+            <p id="processing-status-sub">Running OCR extraction, MRZ decoding, ELA image forensics, and biometric face match...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 3: OCR EXTRACTION RESULTS                                     -->
+    <!-- ================================================================= -->
+    <section id="tab-ocr" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Module 1: OCR Extraction &amp; MRZ Decoding</h1>
+        <p class="page-desc">
+          Optical Character Recognition extracted attributes, confidence metrics, and ICAO Doc 9303 Machine Readable Zone lines.
+        </p>
+      </div>
+
+      <div class="cyber-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h3>Extracted Document Attributes</h3>
+            <span class="badge-tech" id="ocr-doc-type-badge">Document: UNKNOWN</span>
+          </div>
+          <span class="badge-green" id="ocr-conf-badge">Mean OCR Confidence: --</span>
+        </div>
+        <div class="card-body">
+          <div class="fields-table-wrapper">
+            <table class="cyber-table" id="ocr-fields-table">
+              <thead>
+                <tr>
+                  <th style="width: 28%">Field Attribute</th>
+                  <th style="width: 52%">Extracted Value</th>
+                  <th style="width: 20%">Status</th>
+                </tr>
+              </thead>
+              <tbody id="ocr-fields-tbody">
+                <tr>
+                  <td colspan="3" class="table-empty">No document screened yet. Start screening from the intake tab.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- ICAO 9303 MRZ Box -->
+          <div class="mrz-card-box hidden" id="mrz-card-box">
+            <h4>ICAO Doc 9303 Machine Readable Zone (MRZ)</h4>
+            <div class="mrz-lines-display" id="mrz-lines-text">P&lt;USA...</div>
+            <div class="mrz-checksum-summary" id="mrz-checksum-summary"></div>
+          </div>
+
+          <!-- Raw OCR Drawer -->
+          <details class="raw-ocr-drawer">
+            <summary>View Complete Raw OCR Text</summary>
+            <pre class="raw-ocr-pre" id="raw-ocr-pre">Awaiting document...</pre>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 4: DOCUMENT VALIDATION RULES                                  -->
+    <!-- ================================================================= -->
+    <section id="tab-validation" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Module 2: Document Standards &amp; Database Validation</h1>
+        <p class="page-desc">
+          Mathematical checksum checks, date validity, border transit regulations, and Mock Watchlist query results.
+        </p>
+      </div>
+
+      <div class="cyber-card">
+        <div class="card-header">
+          <h3>Validation Rule Audit Checklist</h3>
+          <span class="badge-tech" id="val-summary-badge">Status: Pending</span>
+        </div>
+        <div class="card-body">
+          <div class="checklist-grid" id="validation-checklist-container">
+            <div class="checklist-empty">Awaiting document screening to execute validation rules.</div>
+          </div>
+
+          <!-- Mock DB Alert Callout -->
+          <div class="mock-db-callout hidden" id="mock-db-callout">
+            <div class="callout-icon">🚨</div>
+            <div class="callout-content">
+              <h4>Mock Verification Database Alert</h4>
+              <p id="mock-db-callout-text"></p>
+              <small class="disclaimer-text">DEMO DATA – NOT CONNECTED TO GOVERNMENT DATABASES</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 5: TAMPERING DETECTION & FORENSICS (CORE INNOVATION)          -->
+    <!-- ================================================================= -->
+    <section id="tab-tampering" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Module 3: Tampering Detection &amp; Image Forensics</h1>
+        <p class="page-desc">
+          Error Level Analysis (ELA) recompression heatmaps, facial photo replacement detection, stamp forgery analysis, and EXIF metadata audit.
+        </p>
+      </div>
+
+      <div class="tamper-layout">
+        <!-- Left: Heatmap Viewer -->
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>Forensic Error Level Analysis (ELA) Heatmap</h3>
+            <div class="view-toggle-group">
+              <button type="button" class="toggle-btn active" id="btn-view-overlay">Heatmap Overlay</button>
+              <button type="button" class="toggle-btn" id="btn-view-pure-ela">Raw Heatmap</button>
+            </div>
+          </div>
+          <div class="card-body heatmap-container">
+            <div class="heatmap-wrapper">
+              <img id="ela-heatmap-img" src="" alt="Forensic Heatmap" class="heatmap-img" />
+              <div class="heatmap-legend">
+                <span class="legend-chip chip-blue">Uniform (Authentic)</span>
+                <span class="legend-chip chip-yellow">Moderate Delta</span>
+                <span class="legend-chip chip-red">High Anomaly (Tampered)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Tampering Diagnostics & EXIF -->
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>Tamper Diagnostics &amp; Findings</h3>
+            <span class="badge-red" id="tamper-score-badge">Tamper Score: --</span>
+          </div>
+          <div class="card-body">
+            <!-- Tamper Meters -->
+            <div class="tamper-metric-box">
+              <div class="metric-row">
+                <span>Tamper Probability:</span>
+                <strong id="metric-tamper-pct">0.0%</strong>
+              </div>
+              <div class="metric-row">
+                <span>Photo Splicing Detected:</span>
+                <strong id="metric-photo-splice">No</strong>
+              </div>
+              <div class="metric-row">
+                <span>Border Stamp Forgery:</span>
+                <strong id="metric-stamp-forgery">Clean</strong>
+              </div>
+            </div>
+
+            <!-- Detection Reasons List -->
+            <h4 class="subhead">Explainable Forensic Reasons:</h4>
+            <ul class="tamper-reasons-list" id="tamper-reasons-list">
+              <li>Awaiting screening execution.</li>
+            </ul>
+
+            <!-- EXIF Metadata Audit Box -->
+            <h4 class="subhead">EXIF &amp; Metadata Forensics:</h4>
+            <div class="exif-audit-box" id="exif-audit-box">
+              <div class="exif-row"><span>Editing Software:</span> <strong id="exif-software">Clean / None Detected</strong></div>
+              <div class="exif-row"><span>Timestamp Discrepancy:</span> <strong id="exif-timestamp">None</strong></div>
+              <div class="exif-row"><span>Hardware Verified:</span> <strong id="exif-hardware">Yes / Optical Scanner</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 6: BIOMETRIC FACE VERIFICATION                                -->
+    <!-- ================================================================= -->
+    <section id="tab-face" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Module 4: Biometric Face Verification</h1>
+        <p class="page-desc">
+          1:1 Biometric matching comparing facial portrait extracted from travel document against presented live passenger photograph.
+        </p>
+      </div>
+
+      <div class="cyber-card">
+        <div class="card-header">
+          <h3>Biometric Facial Audit (Document vs Live Person)</h3>
+          <span class="badge-tech" id="face-match-badge">Status: Pending</span>
+        </div>
+        <div class="card-body">
+          <div class="face-compare-grid">
+            <!-- Document Face Box -->
+            <div class="face-crop-card">
+              <h4>Document Photo Crop</h4>
+              <div class="face-img-frame" id="doc-face-frame">
+                <img id="doc-face-crop-img" src="" alt="Document Face" class="face-crop-img" />
+                <span class="face-placeholder-text" id="doc-face-placeholder">Awaiting Document</span>
+              </div>
+              <span class="face-sublabel">Extracted via Anthropometric Haar Detection</span>
+            </div>
+
+            <!-- Center Match Gauge -->
+            <div class="face-match-gauge">
+              <div class="match-circle" id="match-circle">
+                <span class="match-val" id="match-val-text">--%</span>
+                <span class="match-lbl">SIMILARITY</span>
+              </div>
+              <div class="match-verdict-tag" id="match-verdict-tag">Awaiting Comparison</div>
+              <p class="match-confidence-sub" id="match-conf-text">Confidence: --%</p>
+            </div>
+
+            <!-- Live Passenger Face Box -->
+            <div class="face-crop-card">
+              <h4>Live Passenger Photo</h4>
+              <div class="face-img-frame" id="live-face-frame">
+                <img id="live-face-crop-img" src="" alt="Live Face" class="face-crop-img" />
+                <span class="face-placeholder-text" id="live-face-placeholder">Awaiting Live Photo</span>
+              </div>
+              <span class="face-sublabel">Presented Individual / Webcam Capture</span>
+            </div>
+          </div>
+
+          <div class="face-explain-box" id="face-explain-box">
+            Provide a live passenger photo to execute 1:1 facial biometric matching.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 7: RISK ASSESSMENT & FINAL VERDICT                            -->
+    <!-- ================================================================= -->
+    <section id="tab-risk" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Dynamic Risk Assessment &amp; Final Verdict</h1>
+        <p class="page-desc">
+          Composite transparent 0–100 risk score combining validation failures, tampering probability, watchlist hits, and biometric mismatch.
+        </p>
+      </div>
+
+      <!-- Verdict Banner -->
+      <div class="verdict-banner banner-pending" id="master-verdict-banner">
+        <div class="verdict-icon" id="master-verdict-icon">🛡️</div>
+        <div class="verdict-details">
+          <span class="verdict-kicker">AUTOMATED SCREENING DECISION</span>
+          <h2 class="verdict-headline" id="master-verdict-headline">Awaiting Screening Execution</h2>
+          <p class="verdict-summary" id="master-verdict-summary">Initiate document screening from the intake tab to generate an assessment.</p>
+        </div>
+        <button type="button" class="cyber-btn btn-print-report" id="btn-print-certificate">
+          <span>🖨️ Download Screening Certificate</span>
+        </button>
+      </div>
+
+      <!-- Risk Score Radial Meter & Factors Table -->
+      <div class="risk-layout">
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>Composite Risk Score</h3>
+            <span class="badge-tech">0 – 100 Scale</span>
+          </div>
+          <div class="card-body text-center">
+            <div class="risk-gauge-circle" id="risk-gauge-circle">
+              <span class="risk-number" id="risk-number-display">0</span>
+              <span class="risk-denom">/ 100</span>
+            </div>
+            <div class="risk-tier-badge badge-green" id="risk-tier-badge">LOW RISK</div>
+            <p class="risk-threshold-guide">
+              0–29: LOW • 30–59: MEDIUM • 60–79: HIGH • 80–100: CRITICAL
+            </p>
+          </div>
+        </div>
+
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>Contributing Risk Factors Breakdown</h3>
+            <span class="badge-tech" id="factors-count-badge">0 Factors</span>
+          </div>
+          <div class="card-body">
+            <table class="cyber-table">
+              <thead>
+                <tr>
+                  <th>Severity</th>
+                  <th>Factor Name</th>
+                  <th>Description</th>
+                  <th>Points</th>
+                </tr>
+              </thead>
+              <tbody id="risk-factors-tbody">
+                <tr><td colspan="4" class="table-empty">No active risk factors recorded.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 8: SCREENING HISTORY (SQLITE AUDIT TRAIL)                     -->
+    <!-- ================================================================= -->
+    <section id="tab-history" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Border Security Screening History</h1>
+        <p class="page-desc">
+          Persistent local SQLite audit log of all screened passengers and documents. Click any record to inspect full forensic report.
+        </p>
+      </div>
+
+      <div class="cyber-card">
+        <div class="card-header">
+          <h3>Screening Audit Log</h3>
+          <button type="button" class="cyber-btn btn-secondary btn-sm" id="btn-refresh-history">↻ Refresh History</button>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="cyber-table" id="history-table">
+              <thead>
+                <tr>
+                  <th>Screening ID</th>
+                  <th>Date &amp; Time</th>
+                  <th>Document Type</th>
+                  <th>Subject Name</th>
+                  <th>Document No</th>
+                  <th>Risk Score</th>
+                  <th>Verdict</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="history-tbody">
+                <tr><td colspan="8" class="table-empty">Loading history records...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 9: MOCK VERIFICATION DATABASE                                 -->
+    <!-- ================================================================= -->
+    <section id="tab-mockdb" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Mock Border Verification Database</h1>
+        <p class="page-desc">
+          Simulated border control registry containing mock watchlists, Interpol notices, stolen passport stock, and expired visas.
+        </p>
+      </div>
+
+      <div class="mock-disclaimer-banner">
+        <strong>⚠️ DEMO DATA – NOT CONNECTED TO GOVERNMENT DATABASES</strong>
+        <p>This database is purely local to this demonstration prototype for illustrating automated cross-border watchlist hits.</p>
+      </div>
+
+      <div class="cyber-card">
+        <div class="card-header">
+          <h3>Simulated Watchlist &amp; Revocation Registry</h3>
+          <span class="badge-tech">SQLite Local Table</span>
+        </div>
+        <div class="card-body">
+          <table class="cyber-table" id="mockdb-table">
+            <thead>
+              <tr>
+                <th>Document No</th>
+                <th>Type</th>
+                <th>Subject Name</th>
+                <th>Status</th>
+                <th>Flagged Reason</th>
+                <th>Country</th>
+                <th>Security Notes</th>
+              </tr>
+            </thead>
+            <tbody id="mockdb-tbody">
+              <tr><td colspan="7" class="table-empty">Loading simulated watchlist records...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 10: SYSTEM INFORMATION & ARCHITECTURE                         -->
+    <!-- ================================================================= -->
+    <section id="tab-system" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">System Information &amp; Technical Architecture</h1>
+        <p class="page-desc">
+          Algorithmic specifications, hardware diagnostics, and engine status for SIH26188 evaluation.
+        </p>
+      </div>
+
+      <div class="system-grid">
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>🛡️ System Diagnostics</h3>
+            <span class="badge-green">ONLINE</span>
+          </div>
+          <div class="card-body">
+            <ul class="system-info-list" id="system-info-list">
+              <li><strong>Problem Statement:</strong> SIH26188 (Ministry of Home Affairs)</li>
+              <li><strong>Category:</strong> Blockchain &amp; Cybersecurity</li>
+              <li><strong>Framework:</strong> FastAPI Python Core Server (Windows Native)</li>
+              <li><strong>OCR Engine:</strong> Tesseract OCR with Bilateral Noise Reduction</li>
+              <li><strong>Computer Vision:</strong> OpenCV 5.0 (Error Level Analysis, Haar Cascade)</li>
+              <li><strong>Local Database:</strong> SQLite3 Persistent Storage</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cyber-card">
+          <div class="card-header">
+            <h3>⚙️ 5-Layer Forensic Pipeline</h3>
+            <span class="badge-tech">Deterministic</span>
+          </div>
+          <div class="card-body">
+            <ol class="pipeline-spec-list">
+              <li><strong>Layer 1: OCR &amp; MRZ</strong> — ICAO Doc 9303 7-3-1 weighting checksum verification.</li>
+              <li><strong>Layer 2: Rule Engine</strong> — Expiry dates, border 6-month validity rule, and Verhoeff D5 mathematical checksums.</li>
+              <li><strong>Layer 3: Forensics (ELA)</strong> — Resaves at 90% JPEG quality to isolate spliced facial ROIs and pasted text.</li>
+              <li><strong>Layer 4: Metadata Forensics</strong> — EXIF analysis for Adobe Photoshop, Canva, or GIMP signatures.</li>
+              <li><strong>Layer 5: Biometric Verification</strong> — 1:1 HSV &amp; structural template facial correlation.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Printable Border Screening Certificate (Modal / Print Template) -->
+  <div class="certificate-modal hidden" id="certificate-modal">
+    <div class="certificate-container" id="printable-certificate">
+      <div class="cert-header">
+        <div class="cert-crest">🛡️</div>
+        <div class="cert-header-text">
+          <h2>MINISTRY OF HOME AFFAIRS — BORDER SECURITY SCREENING</h2>
+          <p>TruthLens Automated Identity &amp; Travel Document Forensic Certificate</p>
+        </div>
+        <div class="cert-ref">
+          <span>Ref ID:</span>
+          <strong id="cert-screening-id">TL-20260903-XXXX</strong>
+        </div>
+      </div>
+
+      <div class="cert-divider"></div>
+
+      <div class="cert-body">
+        <div class="cert-row">
+          <div class="cert-col"><strong>Document Type:</strong> <span id="cert-doc-type">PASSPORT</span></div>
+          <div class="cert-col"><strong>Subject Name:</strong> <span id="cert-subject-name">JOHNATHAN DOE</span></div>
+          <div class="cert-col"><strong>Document Number:</strong> <span id="cert-doc-number">A89412051</span></div>
+        </div>
+        <div class="cert-row">
+          <div class="cert-col"><strong>Screening Timestamp:</strong> <span id="cert-timestamp">--</span></div>
+          <div class="cert-col"><strong>Risk Score:</strong> <span id="cert-risk-score">6 / 100</span></div>
+          <div class="cert-col"><strong>Final Verdict:</strong> <span id="cert-verdict">VERIFIED / LOW RISK</span></div>
+        </div>
+
+        <div class="cert-section-title">Forensic Audit Summary</div>
+        <p id="cert-summary-text">Document verified authentic across optical, mathematical, and forensic checks.</p>
+
+        <div class="cert-section-title">Officer Enforcement Recommendation</div>
+        <p id="cert-rec-text">Clear for transit. Document verified authentic.</p>
+
+        <div class="cert-footer">
+          <small>Generated by TruthLens (SIH26188) • Recommendation requires officer oversight before enforcement.</small>
+          <div class="cert-stamp">VERIFIED BY TRUTHLENS AI</div>
+        </div>
+      </div>
+
+      <div class="cert-modal-actions">
+        <button type="button" class="cyber-btn btn-primary" onclick="window.print()">Print / Save as PDF</button>
+        <button type="button" class="cyber-btn btn-outline" id="btn-close-cert">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Application Script -->
+  <script src="/static/js/app.js?v=3.0"></script>
+</body>
+</html>
