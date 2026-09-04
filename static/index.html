@@ -1,18 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TruthLens — AI-Based Fake Identity & Document Screening System (SIH26188)</title>
-  <meta name="description" content="AI-Based Fake Identity & Document Screening System for Border Checkpoints (SIH26188). Autonomous screening combining OCR, ICAO 9303 MRZ, Verhoeff checksums, Error Level Analysis (ELA), and 1:1 Biometric Face Verification." />
-  
+  <meta name="description"
+    content="AI-Based Fake Identity & Document Screening System for Border Checkpoints (SIH26188). Autonomous screening combining OCR, ICAO 9303 MRZ, Verhoeff checksums, Error Level Analysis (ELA), and 1:1 Biometric Face Verification." />
+
   <!-- Modern Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<<<<<<< HEAD
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
   <link rel="stylesheet" href="/static/css/style.css?v=5.0" />
+=======
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/css/style.css?v=3.0" />
+>>>>>>> 08498b1d0bd0ac939a0da9aa5b91f8af749a742a
 </head>
+
 <body>
   <!-- Ambient Cyber Background -->
   <div class="cyber-grid"></div>
@@ -25,10 +36,10 @@
       <div class="brand-group">
         <div class="crest-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <circle cx="12" cy="11" r="3" stroke-width="2"/>
-            <path d="M12 8v-1"/>
-            <path d="M12 15v-1"/>
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <circle cx="12" cy="11" r="3" stroke-width="2" />
+            <path d="M12 8v-1" />
+            <path d="M12 15v-1" />
           </svg>
         </div>
         <div class="brand-text">
@@ -99,7 +110,8 @@
       <div class="section-intro">
         <h1 class="page-title">Border Checkpoint Command Center</h1>
         <p class="page-desc">
-          Live monitoring of passenger document screenings, automated risk distributions, and forensic activity across border security terminals.
+          Live monitoring of passenger document screenings, automated risk distributions, and forensic activity across
+          border security terminals.
         </p>
       </div>
 
@@ -184,7 +196,7 @@
         <div class="cyber-card">
           <div class="card-header">
             <h3>⚡ Quick Demonstration Scenarios</h3>
-            <span class="badge-judges">Hackathon Mode</span>
+            <span class="badge-judges">Hackathon Project</span>
           </div>
           <div class="card-body">
             <p class="card-desc">Click to immediately execute pre-packaged test cases:</p>
@@ -212,22 +224,6 @@
                 </div>
                 <small>Spliced photo, altered name (Interpol alert), corrupt MRZ, face mismatch</small>
               </button>
-
-              <button type="button" class="quick-demo-btn btn-scenario-1" id="btn-quick-scenario-4">
-                <div class="btn-top">
-                  <span class="badge-green">Scenario 4</span>
-                  <strong>Genuine Aadhaar (QR Verified)</strong>
-                </div>
-                <small>UIDAI Verhoeff algorithm + Cryptographic QR verified authentic (Low Risk: 6/100)</small>
-              </button>
-
-              <button type="button" class="quick-demo-btn btn-scenario-2" id="btn-quick-scenario-5">
-                <div class="btn-top">
-                  <span class="badge-red">Scenario 5</span>
-                  <strong>Tampered Aadhaar (Name Altered)</strong>
-                </div>
-                <small>Photoshop altered name vs Cryptographic QR discrepancy (High Risk: 71/100)</small>
-              </button>
             </div>
           </div>
         </div>
@@ -241,7 +237,8 @@
       <div class="section-intro">
         <h1 class="page-title">Document &amp; Identity Intake</h1>
         <p class="page-desc">
-          Upload any travel document (Passport, Visa, National ID, Driving License, Permit) and optional passenger live photo or webcam snapshot to initiate screening.
+          Upload any travel document (Passport, Visa, National ID, Driving License, Permit) and optional passenger live
+          photo or webcam snapshot to initiate screening.
         </p>
       </div>
 
@@ -323,7 +320,8 @@
 
             <!-- Drag & Drop Dropzone -->
             <div class="dropzone" id="doc-dropzone">
-              <input type="file" id="doc-file-input" accept="image/jpeg,image/png,image/jpg" class="file-input-hidden" />
+              <input type="file" id="doc-file-input" accept="image/jpeg,image/png,image/jpg"
+                class="file-input-hidden" />
               <div class="dropzone-content" id="doc-dropzone-content">
                 <div class="drop-icon">📤</div>
                 <h4 class="drop-title">Drop travel document image here</h4>
@@ -351,7 +349,8 @@
 
             <!-- File Upload for Live Face -->
             <div class="dropzone" id="live-dropzone">
-              <input type="file" id="live-file-input" accept="image/jpeg,image/png,image/jpg" class="file-input-hidden" />
+              <input type="file" id="live-file-input" accept="image/jpeg,image/png,image/jpg"
+                class="file-input-hidden" />
               <div class="dropzone-content" id="live-dropzone-content">
                 <div class="drop-icon">👤</div>
                 <h4 class="drop-title">Drop live passenger photo</h4>
@@ -393,7 +392,8 @@
           <div class="cyber-spinner"></div>
           <div class="processing-text">
             <h4 id="processing-status-title">Executing Deep Document Analysis...</h4>
-            <p id="processing-status-sub">Running OCR extraction, MRZ decoding, ELA image forensics, and biometric face match...</p>
+            <p id="processing-status-sub">Running OCR extraction, MRZ decoding, ELA image forensics, and biometric face
+              match...</p>
           </div>
         </div>
       </div>
@@ -643,7 +643,8 @@
       <div class="section-intro">
         <h1 class="page-title">Module 1: OCR Extraction &amp; MRZ Decoding</h1>
         <p class="page-desc">
-          Optical Character Recognition extracted attributes, confidence metrics, and ICAO Doc 9303 Machine Readable Zone lines.
+          Optical Character Recognition extracted attributes, confidence metrics, and ICAO Doc 9303 Machine Readable
+          Zone lines.
         </p>
       </div>
 
@@ -667,7 +668,8 @@
               </thead>
               <tbody id="ocr-fields-tbody">
                 <tr>
-                  <td colspan="3" class="table-empty">No document screened yet. Start screening from the intake tab.</td>
+                  <td colspan="3" class="table-empty">No document screened yet. Start screening from the intake tab.
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -678,30 +680,6 @@
             <h4>ICAO Doc 9303 Machine Readable Zone (MRZ)</h4>
             <div class="mrz-lines-display" id="mrz-lines-text">P&lt;USA...</div>
             <div class="mrz-checksum-summary" id="mrz-checksum-summary"></div>
-          </div>
-
-          <!-- Cryptographic QR vs Printed Cross-Verification Box -->
-          <div class="mrz-card-box hidden" id="qr-cross-box" style="margin-top: 1.5rem; border-color: rgba(99, 102, 241, 0.4);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-              <h4 style="margin: 0; color: #818CF8;">🔐 Cryptographic QR vs Printed Data Cross-Check</h4>
-              <span id="qr-cross-badge" class="badge-green">QR Verified</span>
-            </div>
-            <p style="font-size: 0.85rem; color: #94A3B8; margin-bottom: 1rem;">
-              Cross-checks optical characters on card face against tamper-proof encrypted QR code payload (Anti-Photoshop Tamper Verification).
-            </p>
-            <table class="cyber-table" style="font-size: 0.85rem;">
-              <thead>
-                <tr>
-                  <th>Field</th>
-                  <th>Printed on Card (OCR)</th>
-                  <th>Cryptographic QR Record</th>
-                  <th>Match Status</th>
-                </tr>
-              </thead>
-              <tbody id="qr-cross-tbody">
-                <tr><td colspan="4" class="table-empty">No QR code detected.</td></tr>
-              </tbody>
-            </table>
           </div>
 
           <!-- Raw OCR Drawer -->
@@ -754,7 +732,8 @@
       <div class="section-intro">
         <h1 class="page-title">Module 3: Tampering Detection &amp; Image Forensics</h1>
         <p class="page-desc">
-          Error Level Analysis (ELA) recompression heatmaps, facial photo replacement detection, stamp forgery analysis, and EXIF metadata audit.
+          Error Level Analysis (ELA) recompression heatmaps, facial photo replacement detection, stamp forgery analysis,
+          and EXIF metadata audit.
         </p>
       </div>
 
@@ -812,9 +791,11 @@
             <!-- EXIF Metadata Audit Box -->
             <h4 class="subhead">EXIF &amp; Metadata Forensics:</h4>
             <div class="exif-audit-box" id="exif-audit-box">
-              <div class="exif-row"><span>Editing Software:</span> <strong id="exif-software">Clean / None Detected</strong></div>
+              <div class="exif-row"><span>Editing Software:</span> <strong id="exif-software">Clean / None
+                  Detected</strong></div>
               <div class="exif-row"><span>Timestamp Discrepancy:</span> <strong id="exif-timestamp">None</strong></div>
-              <div class="exif-row"><span>Hardware Verified:</span> <strong id="exif-hardware">Yes / Optical Scanner</strong></div>
+              <div class="exif-row"><span>Hardware Verified:</span> <strong id="exif-hardware">Yes / Optical
+                  Scanner</strong></div>
             </div>
           </div>
         </div>
@@ -828,7 +809,8 @@
       <div class="section-intro">
         <h1 class="page-title">Module 4: Biometric Face Verification</h1>
         <p class="page-desc">
-          1:1 Biometric matching comparing facial portrait extracted from travel document against presented live passenger photograph.
+          1:1 Biometric matching comparing facial portrait extracted from travel document against presented live
+          passenger photograph.
         </p>
       </div>
 
@@ -884,7 +866,8 @@
       <div class="section-intro">
         <h1 class="page-title">Dynamic Risk Assessment &amp; Final Verdict</h1>
         <p class="page-desc">
-          Composite transparent 0–100 risk score combining validation failures, tampering probability, watchlist hits, and biometric mismatch.
+          Composite transparent 0–100 risk score combining validation failures, tampering probability, watchlist hits,
+          and biometric mismatch.
         </p>
       </div>
 
@@ -894,7 +877,8 @@
         <div class="verdict-details">
           <span class="verdict-kicker">AUTOMATED SCREENING DECISION</span>
           <h2 class="verdict-headline" id="master-verdict-headline">Awaiting Screening Execution</h2>
-          <p class="verdict-summary" id="master-verdict-summary">Initiate document screening from the intake tab to generate an assessment.</p>
+          <p class="verdict-summary" id="master-verdict-summary">Initiate document screening from the intake tab to
+            generate an assessment.</p>
         </div>
         <button type="button" class="cyber-btn btn-print-report" id="btn-print-certificate">
           <span>🖨️ Download Screening Certificate</span>
@@ -936,7 +920,9 @@
                 </tr>
               </thead>
               <tbody id="risk-factors-tbody">
-                <tr><td colspan="4" class="table-empty">No active risk factors recorded.</td></tr>
+                <tr>
+                  <td colspan="4" class="table-empty">No active risk factors recorded.</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -951,14 +937,16 @@
       <div class="section-intro">
         <h1 class="page-title">Border Security Screening History</h1>
         <p class="page-desc">
-          Persistent local SQLite audit log of all screened passengers and documents. Click any record to inspect full forensic report.
+          Persistent local SQLite audit log of all screened passengers and documents. Click any record to inspect full
+          forensic report.
         </p>
       </div>
 
       <div class="cyber-card">
         <div class="card-header">
           <h3>Screening Audit Log</h3>
-          <button type="button" class="cyber-btn btn-secondary btn-sm" id="btn-refresh-history">↻ Refresh History</button>
+          <button type="button" class="cyber-btn btn-secondary btn-sm" id="btn-refresh-history">↻ Refresh
+            History</button>
         </div>
         <div class="card-body">
           <div class="table-responsive">
@@ -976,7 +964,9 @@
                 </tr>
               </thead>
               <tbody id="history-tbody">
-                <tr><td colspan="8" class="table-empty">Loading history records...</td></tr>
+                <tr>
+                  <td colspan="8" class="table-empty">Loading history records...</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -991,13 +981,15 @@
       <div class="section-intro">
         <h1 class="page-title">Mock Border Verification Database</h1>
         <p class="page-desc">
-          Simulated border control registry containing mock watchlists, Interpol notices, stolen passport stock, and expired visas.
+          Simulated border control registry containing mock watchlists, Interpol notices, stolen passport stock, and
+          expired visas.
         </p>
       </div>
 
       <div class="mock-disclaimer-banner">
         <strong>⚠️ DEMO DATA – NOT CONNECTED TO GOVERNMENT DATABASES</strong>
-        <p>This database is purely local to this demonstration prototype for illustrating automated cross-border watchlist hits.</p>
+        <p>This database is purely local to this demonstration prototype for illustrating automated cross-border
+          watchlist hits.</p>
       </div>
 
       <div class="cyber-card">
@@ -1019,7 +1011,9 @@
               </tr>
             </thead>
             <tbody id="mockdb-tbody">
-              <tr><td colspan="7" class="table-empty">Loading simulated watchlist records...</td></tr>
+              <tr>
+                <td colspan="7" class="table-empty">Loading simulated watchlist records...</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -1063,10 +1057,14 @@
           <div class="card-body">
             <ol class="pipeline-spec-list">
               <li><strong>Layer 1: OCR &amp; MRZ</strong> — ICAO Doc 9303 7-3-1 weighting checksum verification.</li>
-              <li><strong>Layer 2: Rule Engine</strong> — Expiry dates, border 6-month validity rule, and Verhoeff D5 mathematical checksums.</li>
-              <li><strong>Layer 3: Forensics (ELA)</strong> — Resaves at 90% JPEG quality to isolate spliced facial ROIs and pasted text.</li>
-              <li><strong>Layer 4: Metadata Forensics</strong> — EXIF analysis for Adobe Photoshop, Canva, or GIMP signatures.</li>
-              <li><strong>Layer 5: Biometric Verification</strong> — 1:1 HSV &amp; structural template facial correlation.</li>
+              <li><strong>Layer 2: Rule Engine</strong> — Expiry dates, border 6-month validity rule, and Verhoeff D5
+                mathematical checksums.</li>
+              <li><strong>Layer 3: Forensics (ELA)</strong> — Resaves at 90% JPEG quality to isolate spliced facial ROIs
+                and pasted text.</li>
+              <li><strong>Layer 4: Metadata Forensics</strong> — EXIF analysis for Adobe Photoshop, Canva, or GIMP
+                signatures.</li>
+              <li><strong>Layer 5: Biometric Verification</strong> — 1:1 HSV &amp; structural template facial
+                correlation.</li>
             </ol>
           </div>
         </div>
@@ -1111,7 +1109,8 @@
         <p id="cert-rec-text">Clear for transit. Document verified authentic.</p>
 
         <div class="cert-footer">
-          <small>Generated by TruthLens (SIH26188) • Recommendation requires officer oversight before enforcement.</small>
+          <small>Generated by TruthLens (SIH26188) • Recommendation requires officer oversight before
+            enforcement.</small>
           <div class="cert-stamp">VERIFIED BY TRUTHLENS AI</div>
         </div>
       </div>
@@ -1126,4 +1125,5 @@
   <!-- Client Application Script -->
   <script src="/static/js/app.js?v=5.0"></script>
 </body>
+
 </html>
