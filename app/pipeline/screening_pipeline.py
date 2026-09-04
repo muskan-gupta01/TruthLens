@@ -27,7 +27,6 @@ from app.pipeline.metadata_forensics import analyze_image_metadata
 from app.pipeline.face_verifier import verify_identity_face
 from app.pipeline.cross_verifier import cross_verify_documents
 from app.pipeline.risk_engine import compute_risk_assessment
-from app.pipeline.hf_llm_officer import generate_llm_officer_briefing
 from app.database.db_manager import log_screening
 from app.config import (
     DOC_TYPE_PASSPORT,
@@ -313,16 +312,6 @@ def run_truthlens_screening(
         ]
     }
 
-    # Generate Hugging Face / LLM AI Officer Intelligence Briefing
-    llm_briefing = generate_llm_officer_briefing({
-        "document_type": doc_type,
-        "extracted_fields": fields,
-        "risk_assessment": risk_report,
-        "forensics_ela": forensics_result,
-        "face_verification": face_result,
-        "validation": validation_result
-    })
-    dossier["llm_briefing"] = llm_briefing
 
     # Master audit record
     full_report = {
@@ -355,8 +344,7 @@ def run_truthlens_screening(
         "face_verification": face_result,
         "cross_verification": cross_result,
         "risk_assessment": risk_report,
-        "explainability": explainability,
-        "llm_briefing": llm_briefing
+        "explainability": explainability
     }
 
     # Log to SQLite local database

@@ -954,47 +954,6 @@
       officerRec.textContent = data.officer_recommendation || 'Proceed according to standard border control clearance rules.';
     }
 
-    // Render Hugging Face AI Officer Briefing
-    const hfData = data.llm_briefing || (data.dossier && data.dossier.llm_briefing) || {};
-    const hfModelBadge = document.getElementById('dossier-hf-model-badge');
-    const hfSummary = document.getElementById('dossier-hf-summary');
-    const hfEvidence = document.getElementById('dossier-hf-evidence');
-    const hfLegal = document.getElementById('dossier-hf-legal');
-    const hfProtocol = document.getElementById('dossier-hf-protocol');
-
-    if (hfModelBadge) hfModelBadge.textContent = hfData.model_used || '🤗 Mistral-7B / Qwen-2.5';
-    if (hfSummary) hfSummary.textContent = hfData.executive_summary || data.summary || 'Summary unavailable.';
-    if (hfEvidence) hfEvidence.textContent = hfData.forensic_reasoning || 'Biometrics and compression verified authentic.';
-    if (hfLegal) hfLegal.textContent = hfData.legal_basis || 'Compliant with Passports Act 1967 and Bureau of Immigration standards.';
-    if (hfProtocol) hfProtocol.textContent = hfData.officer_protocol || data.officer_recommendation || 'Proceed with intake clearance.';
-
-    const btnRefreshLlm = document.getElementById('btn-refresh-llm');
-    if (btnRefreshLlm) {
-      btnRefreshLlm.onclick = async () => {
-        btnRefreshLlm.disabled = true;
-        btnRefreshLlm.textContent = '⏳ Thinking...';
-        try {
-          const res = await fetch('/api/llm/briefing', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-          });
-          if (res.ok) {
-            const freshBriefing = await res.json();
-            if (hfModelBadge) hfModelBadge.textContent = freshBriefing.model_used || '🤗 Mistral-7B / Qwen-2.5';
-            if (hfSummary) hfSummary.textContent = freshBriefing.executive_summary || '';
-            if (hfEvidence) hfEvidence.textContent = freshBriefing.forensic_reasoning || '';
-            if (hfLegal) hfLegal.textContent = freshBriefing.legal_basis || '';
-            if (hfProtocol) hfProtocol.textContent = freshBriefing.officer_protocol || '';
-          }
-        } catch (e) {
-          console.error(e);
-        } finally {
-          btnRefreshLlm.disabled = false;
-          btnRefreshLlm.textContent = '🔄 Regenerate';
-        }
-      };
-    }
 
     // Connect Certificate Download in Dossier
     const btnDossierPrint = document.getElementById('dossier-btn-print');
