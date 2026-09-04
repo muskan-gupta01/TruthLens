@@ -98,7 +98,6 @@ def extract_text_and_data(image_input) -> Tuple[str, float]:
 
     try:
         preprocessed = preprocess_image_for_ocr(cv_img, binarize=False)
-        data = pytesseract.image_to_data(preprocessed, output_type=Output.DICT, config=custom_config)
         raw_text = pytesseract.image_to_string(preprocessed, config=custom_config)
 
         # If Pass 1 is sparse, test PSM 11 (Sparse text recovery)
@@ -106,45 +105,33 @@ def extract_text_and_data(image_input) -> Tuple[str, float]:
             sparse_text = pytesseract.image_to_string(preprocessed, config=r"--oem 3 --psm 11")
             if len(sparse_text.strip()) > len(raw_text.strip()):
                 raw_text = sparse_text
-                data = pytesseract.image_to_data(preprocessed, output_type=Output.DICT, config=r"--oem 3 --psm 11")
 
         # If still sparse, run Pass 3 with Otsu binarization
-        if len(raw_text.strip()) < 25:
+        if len(raw_text.strip()) < 15:
             preprocessed_b = preprocess_image_for_ocr(cv_img, binarize=True)
             text_pass3 = pytesseract.image_to_string(preprocessed_b, config=custom_config)
             if len(text_pass3.strip()) > len(raw_text.strip()):
                 raw_text = text_pass3
-                data = pytesseract.image_to_data(preprocessed_b, output_type=Output.DICT, config=custom_config)
-
-        # If still sparse (< 25 chars), test phone camera rotations (90°, 180°, 270°)
-        if len(raw_text.strip()) < 25:
-            rot_angles = [
-                cv2.ROTATE_90_CLOCKWISE,
-                cv2.ROTATE_180,
-                cv2.ROTATE_90_COUNTERCLOCKWISE
-            ]
-            for rot_flag in rot_angles:
-                rotated_cv = cv2.rotate(cv_img, rot_flag)
-                prep_rot = preprocess_image_for_ocr(rotated_cv, binarize=False)
-                txt_rot = pytesseract.image_to_string(prep_rot, config=custom_config)
-                if len(txt_rot.strip()) < 20:
-                    txt_rot_sparse = pytesseract.image_to_string(prep_rot, config=r"--oem 3 --psm 11")
-                    if len(txt_rot_sparse.strip()) > len(txt_rot.strip()):
-                        txt_rot = txt_rot_sparse
-                if len(txt_rot.strip()) > len(raw_text.strip()) + 12:
-                    raw_text = txt_rot
-                    data = pytesseract.image_to_data(prep_rot, output_type=Output.DICT, config=custom_config)
-                    break
 
         if not raw_text.strip():
             return "", 0.0
 
-        confidences = [
-            int(conf) for conf in data.get("conf", [])
-            if conf != "-1" and str(conf).isdigit() and int(conf) > 0
-        ]
-        mean_conf = float(np.mean(confidences)) if confidences else 75.0
+        # Calculate confidence metric
+        try:
+            data = pytesseract.image_to_data(preprocessed, output_type=Output.DICT, config=custom_config)
+            confidences = [
+                int(conf) for conf in data.get("conf", [])
+                if conf != "-1" and str(conf).isdigit() and int(conf) > 0
+            ]
+            mean_conf = float(np.mean(confidences)) if confidences else 75.0
+        except Exception:
+            mean_conf = 75.0
+
         return raw_text, round(mean_conf, 1)
+
+    except Exception as e:
+        print(f"[OCR ERROR] Failed to run pytesseract: {e}")
+        return "", 0.0
 
     except Exception as e:
         print(f"[OCR ERROR] Failed to run pytesseract: {e}")
@@ -466,39 +453,121 @@ def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
     return fields
 
 
+def _clean_pan_token(token: str) -> Optional[str]:
+    """Cleans a candidate token and checks if it conforms to Indian PAN card format."""
+    token = re.sub(r"[^A-Z0-9]", "", token.upper())
+    if len(token) != 10:
+        return None
+    sub_l = {'0': 'O', '1': 'I', '8': 'B', '5': 'S', '2': 'Z'}
+    l_part = "".join(sub_l.get(ch, ch) for ch in token[:5])
+    sub_d = {'O': '0', 'D': '0', 'Q': '0', 'I': '1', 'L': '1', 'B': '8', 'S': '5', 'Z': '2'}
+    d_part = "".join(sub_d.get(ch, ch) for ch in token[5:9])
+    last_ch = sub_l.get(token[9], token[9])
+    cand = f"{l_part}{d_part}{last_ch}"
+    if re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]$", cand):
+        return cand
+    return None
+
+
+def _is_valid_person_name(cand: str) -> bool:
+    """Validates that candidate is a plausible human name and not camera/sensor noise."""
+    cand = cand.strip()
+    if len(cand) < 3:
+        return False
+    words = cand.split()
+    for w in words:
+        if re.search(r"(.)\1\1", w.lower()):  # repeated 3 identical chars e.g. 'waa', 'eee'
+            return False
+        if len(w) <= 1:
+            return False
+    return True
+
+
 def parse_pan_fields(text: str) -> Dict[str, Any]:
-    """Extracts PAN fields (PAN ID, Name, Father's Name, DOB)."""
+    """Extracts PAN fields (PAN ID, Name, Father's Name, DOB) with OCR error recovery."""
     fields: Dict[str, Any] = {"id_number": None, "name": None, "father_name": None, "dob": None, "gender": None}
 
-    # 1. 10-character PAN Number
+    # 1. 10-character PAN Number (exact search)
     pan_m = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])\b", text.upper())
     if pan_m:
         fields["id_number"] = pan_m.group(1)
+    else:
+        # Token-based scan across entire text for fuzzy matches
+        tokens = re.findall(r"\b[A-Z0-9OILDQSBZ]{9,12}\b", text.upper())
+        for tok in tokens:
+            cand = _clean_pan_token(tok)
+            if cand:
+                fields["id_number"] = cand
+                break
+
+    # If still not found, search with spaces in between characters
+    if not fields["id_number"]:
+        pan_spaced = re.search(r"\b([A-Z0-9]{3,6})\s+([A-Z0-9]{3,6})\b", text.upper())
+        if pan_spaced:
+            merged = pan_spaced.group(1) + pan_spaced.group(2)
+            cand = _clean_pan_token(merged)
+            if cand:
+                fields["id_number"] = cand
 
     # 2. Date of Birth
     dob_m = re.search(r"\b(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})\b", text)
     if dob_m:
         fields["dob"] = dob_m.group(1)
+    else:
+        dob_m2 = re.search(r"(?:Date of Birth|DOB|Birth)[\s:]*(\d{2}\s*[/ \-\.]\s*\d{2}\s*[/ \-\.]\s*\d{4})", text, re.IGNORECASE)
+        if dob_m2:
+            fields["dob"] = re.sub(r"\s+", "", dob_m2.group(1))
 
     # 3. Name (follows 'Name' label)
     nm = re.search(r"(?:Name)\s*\n+([A-Za-z][A-Za-z ]{2,30})\s*(?:\n|$)", text, re.IGNORECASE)
     if nm:
         cand = nm.group(1).strip()
         if not any(k in cand.upper() for k in ["INCOME", "TAX", "DEPARTMENT", "INDIA", "PERMANENT", "ACCOUNT", "NUMBER"]):
-            fields["name"] = cand
+            if _is_valid_person_name(cand):
+                fields["name"] = cand
     if not fields["name"]:
         nm_inline = re.search(r"(?:Name)[\s:]*([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
         if nm_inline:
             cand = nm_inline.group(1).strip()
             if not any(k in cand.upper() for k in ["INCOME", "TAX", "DEPARTMENT", "INDIA", "PERMANENT", "ACCOUNT", "NUMBER"]):
-                fields["name"] = cand
+                if _is_valid_person_name(cand):
+                    fields["name"] = cand
 
     # 4. Father's Name
     fn = re.search(r"(?:Father[\'s]*\s*Name)\s*\n*([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
     if fn:
         cand = fn.group(1).strip()
         if not any(k in cand.upper() for k in ["INCOME", "TAX", "DEPARTMENT", "INDIA", "DATE", "BIRTH"]):
-            fields["father_name"] = cand
+            if _is_valid_person_name(cand):
+                fields["father_name"] = cand
+
+    # 5. Heuristic candidate line scan if label was omitted or unreadable
+    if not fields["name"]:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        ignore_words = [
+            "INCOME", "TAX", "DEPARTMENT", "INDIA", "PERMANENT", "ACCOUNT", "NUMBER",
+            "CARD", "GOVT", "FATHER", "SIGNATURE", "DATE", "BIRTH", "HHH", "HIHI", "WAA",
+            "FARARST", "WRAEW", "ANA", "AYAKAR", "VIBHAG", "BHARAT", "SARKAR", "COURT", "BS"
+        ]
+        # Real person names appear AFTER the header block
+        header_passed = False
+        candidates = []
+        for line in lines:
+            line_up = line.upper()
+            if "ACCOUNT" in line_up or "CARD" in line_up or "DEPARTMENT" in line_up:
+                header_passed = True
+                continue
+            if not header_passed:
+                continue
+
+            clean_l = " ".join(re.findall(r"[A-Za-z]+", line))
+            if 4 <= len(clean_l) <= 28 and not any(w in clean_l.upper() for w in ignore_words):
+                if _is_valid_person_name(clean_l):
+                    candidates.append(clean_l)
+        if candidates:
+            fields["name"] = candidates[0]
+            if len(candidates) > 1 and not fields["father_name"]:
+                fields["father_name"] = candidates[1]
 
     return fields
 
@@ -523,7 +592,7 @@ def extract_document_fields(
     if mrz_result and mrz_result.get("valid_structure") and detected_type == DOC_TYPE_UNKNOWN:
         detected_type = DOC_TYPE_PASSPORT
 
-    # Multi-orientation fallback: if document is UNKNOWN, test 90, 180, 270 degree rotations
+    # Multi-orientation fallback: if document is UNKNOWN, test phone camera inversions
     if detected_type == DOC_TYPE_UNKNOWN:
         if isinstance(image_input, Image.Image):
             cv_base = cv2.cvtColor(np.array(image_input), cv2.COLOR_RGB2BGR)
@@ -533,16 +602,22 @@ def extract_document_fields(
             cv_base = None
 
         if cv_base is not None:
-            for rot_flag in [cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE]:
+            for rot_flag in [cv2.ROTATE_180, cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_90_COUNTERCLOCKWISE]:
                 rot_cv = cv2.rotate(cv_base, rot_flag)
-                t_rot, c_rot = extract_text_and_data(rot_cv)
+                prep_rot = preprocess_image_for_ocr(rot_cv, binarize=False)
+                try:
+                    t_rot = pytesseract.image_to_string(prep_rot, config=r"--oem 3 --psm 3")
+                except Exception:
+                    continue
+                if len(t_rot.strip()) < 20:
+                    continue
                 m_rot = find_and_parse_mrz(t_rot)
                 dt_rot = identify_document_type(t_rot, user_hint=doc_type_hint)
                 if m_rot and m_rot.get("valid_structure") and dt_rot == DOC_TYPE_UNKNOWN:
                     dt_rot = DOC_TYPE_PASSPORT
                 if dt_rot != DOC_TYPE_UNKNOWN:
                     raw_text = t_rot
-                    conf = c_rot
+                    conf = 75.0
                     mrz_result = m_rot
                     detected_type = dt_rot
                     break
@@ -561,6 +636,36 @@ def extract_document_fields(
         fields = parse_aadhaar_fields(raw_text)
     elif detected_type == DOC_TYPE_PAN:
         fields = parse_pan_fields(raw_text)
+        # Targeted red-channel enhancement if PAN number was obscured by glare or waves
+        if not fields.get("id_number"):
+            try:
+                if isinstance(image_input, Image.Image):
+                    cv_bgr = cv2.cvtColor(np.array(image_input), cv2.COLOR_RGB2BGR)
+                elif isinstance(image_input, np.ndarray):
+                    cv_bgr = image_input.copy()
+                else:
+                    cv_bgr = None
+
+                if cv_bgr is not None:
+                    red_ch = cv_bgr[:, :, 2] if len(cv_bgr.shape) == 3 else cv_bgr
+                    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+                    enhanced_red = clahe.apply(red_ch)
+
+                    for psm_mode in [6, 4, 11]:
+                        t_extra = pytesseract.image_to_string(enhanced_red, config=f"--oem 3 --psm {psm_mode}")
+                        if t_extra:
+                            f_extra = parse_pan_fields(t_extra)
+                            if f_extra.get("id_number"):
+                                fields["id_number"] = f_extra["id_number"]
+                            if not fields.get("name") and f_extra.get("name"):
+                                fields["name"] = f_extra["name"]
+                            if not fields.get("dob") and f_extra.get("dob"):
+                                fields["dob"] = f_extra["dob"]
+                            if fields.get("id_number"):
+                                raw_text += "\n" + t_extra
+                                break
+            except Exception:
+                pass
     else:
         # Generic fallback
         fields = {

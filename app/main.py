@@ -18,7 +18,7 @@ import io
 import os
 import base64
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -33,6 +33,7 @@ from app.config import (
     TESSERACT_PATH
 )
 from app.pipeline.screening_pipeline import run_truthlens_screening
+from app.pipeline.hf_llm_officer import generate_llm_officer_briefing
 from app.database.db_manager import (
     get_history,
     get_screening_by_id,
@@ -236,7 +237,9 @@ async def screen_document(
     live_sample_id: Optional[str] = Form(None),
     image_base64: Optional[str] = Form(None),
     live_base64: Optional[str] = Form(None),
-    doc_type: Optional[str] = Form(None)
+    doc_type: Optional[str] = Form(None),
+    doc_number: Optional[str] = Form(None),
+    person_name: Optional[str] = Form(None)
 ):
     """
     Main Border Screening Endpoint:
@@ -244,6 +247,7 @@ async def screen_document(
     1. Document image (File, Sample ID, or Base64)
     2. Optional Live Passenger Photo (File, Live Sample ID, Webcam Base64)
     3. Optional Document Type Hint
+    4. Optional Manual / Confirmed Document Number & Passenger Name
     Executes the 7-step screening pipeline and returns full audit report.
     """
     doc_img = None
@@ -297,7 +301,9 @@ async def screen_document(
         result = run_truthlens_screening(
             doc_image_input=doc_img,
             live_image_input=live_img,
-            doc_type_hint=doc_type
+            doc_type_hint=doc_type,
+            doc_number_override=doc_number,
+            person_name_override=person_name
         )
         return JSONResponse(content=result)
     except Exception as e:
@@ -331,3 +337,10 @@ async def get_mock_database_endpoint():
         "description": "Simulated border control watchlist, stolen passport registry, and revocation notices for demonstration purposes.",
         "records": records
     }
+
+
+@app.post("/api/llm/briefing")
+async def get_llm_briefing_endpoint(data: Dict[str, Any]):
+    """Generates an on-demand Hugging Face AI Officer Intelligence Briefing."""
+    briefing = generate_llm_officer_briefing(data)
+    return JSONResponse(content=briefing)

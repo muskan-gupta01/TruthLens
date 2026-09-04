@@ -223,27 +223,36 @@ def compute_risk_assessment(
     doc_id = fields.get("passport_number") or fields.get("visa_number") or fields.get("id_number")
     doc_type = ocr_report.get("doc_type", "UNKNOWN")
 
-    is_unrecognized = (doc_type == "UNKNOWN") or (not name and not doc_id)
-
-    if is_unrecognized:
+    if doc_type == "UNKNOWN":
         pts = 45
         raw_score += pts
         factors.append({
             "category": "UNRECOGNIZED_DOCUMENT",
             "points": pts,
             "severity": "HIGH",
-            "name": "Unrecognized Document Type / Empty Extraction",
-            "description": "System could not identify a valid travel/identity format. Mandatory attributes (Name, Document ID) could not be extracted."
+            "name": "Unrecognized Document Type / Non-Identity Upload",
+            "description": "System could not identify a valid institutional identity or travel format."
+        })
+    elif not name and not doc_id:
+        # Document header was identified (e.g. PAN card / Aadhaar), but text contrast was poor
+        pts = 18
+        raw_score += pts
+        factors.append({
+            "category": "BLURRY_CAMERA_CAPTURE",
+            "points": pts,
+            "severity": "WARN",
+            "name": f"Low Contrast / Blurry Capture ({doc_type})",
+            "description": f"Document identified as {doc_type}, but optical resolution was too low to read ID numbers clearly. Retake photo under direct light."
         })
     elif not name or not doc_id:
-        pts = 15
+        pts = 10
         raw_score += pts
         factors.append({
             "category": "MISSING_FIELDS",
             "points": pts,
             "severity": "WARN",
-            "name": "Missing Mandatory Identity Fields",
-            "description": "Core identity attributes could not be extracted with sufficient confidence."
+            "name": "Partial Identity Field Extraction",
+            "description": "Core identity attributes partially extracted. Secondary manual verification recommended."
         })
 
     # =========================================================================
@@ -280,6 +289,7 @@ def compute_risk_assessment(
     final_score = int(min(100, max(0, raw_score)))
 
     # Risk level classification
+    is_unrecognized = (doc_type == "UNKNOWN")
     if is_unrecognized:
         risk_level = "HIGH" if final_score >= 60 else "MEDIUM"
         verdict = VERDICT_HIGH_RISK if final_score >= 60 else "NEEDS MANUAL REVIEW"

@@ -2382,3 +2382,597 @@ body {
   justify-content: flex-end;
 }
 
+/* ==========================================================================
+   MASTER FORENSIC SCREENING DOSSIER (LIVE ALL-IN-ONE RESULT)
+   ========================================================================== */
+.master-dossier-wrapper {
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(0, 173, 181, 0.25);
+  animation: fadeInDossier 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeInDossier {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dossier-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dossier-header-title {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.dossier-header-title h2 {
+  font-family: var(--font-tech);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-highlight);
+  letter-spacing: -0.02em;
+}
+
+.pulse-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--teal-neon);
+  box-shadow: 0 0 12px var(--teal-neon);
+  animation: pulseGlow 1.8s infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.dossier-id-badge {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  background: rgba(0, 173, 181, 0.15);
+  color: var(--teal-neon);
+  border: 1px solid rgba(0, 173, 181, 0.35);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+.dossier-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.dossier-time {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* Master Verdict Banner */
+.dossier-verdict-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.6rem 2rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  background: rgba(14, 28, 48, 0.8);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+  transition: all 0.35s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dossier-verdict-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 100%;
+}
+
+.dossier-verdict-banner.verdict-genuine {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(10, 19, 34, 0.85) 100%);
+  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.15);
+}
+.dossier-verdict-banner.verdict-genuine::before {
+  background: #10B981;
+}
+
+.dossier-verdict-banner.verdict-fake {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(10, 19, 34, 0.85) 100%);
+  box-shadow: 0 10px 30px rgba(239, 68, 68, 0.18);
+}
+.dossier-verdict-banner.verdict-fake::before {
+  background: #EF4444;
+}
+
+.dossier-verdict-banner.verdict-review {
+  border-color: rgba(245, 158, 11, 0.5);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(10, 19, 34, 0.85) 100%);
+  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.15);
+}
+.dossier-verdict-banner.verdict-review::before {
+  background: #F59E0B;
+}
+
+.verdict-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  max-width: 70%;
+}
+
+.verdict-status-icon {
+  font-size: 3.2rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.2));
+}
+
+.verdict-kicker {
+  font-family: var(--font-tech);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: var(--teal-neon);
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+  display: block;
+}
+
+.verdict-main-text {
+  font-family: var(--font-tech);
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #fff;
+  margin-bottom: 0.4rem;
+}
+
+.verdict-genuine .verdict-main-text { color: #10B981; }
+.verdict-fake .verdict-main-text { color: #F87171; }
+.verdict-review .verdict-main-text { color: #FBBF24; }
+
+.verdict-reason-text {
+  font-size: 0.95rem;
+  color: var(--text-main);
+  line-height: 1.45;
+}
+
+.verdict-banner-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+}
+
+.dossier-gauge-mini {
+  background: rgba(5, 11, 20, 0.75);
+  border: 2px solid var(--border-subtle);
+  border-radius: 50%;
+  width: 90px;
+  height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.6);
+}
+
+.dossier-gauge-mini .gauge-value {
+  font-family: var(--font-tech);
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+}
+
+.dossier-gauge-mini .gauge-label {
+  font-size: 0.55rem;
+  font-family: var(--font-tech);
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-top: 0.2rem;
+}
+
+.dossier-tier-badge {
+  font-family: var(--font-tech);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.25rem 0.8rem;
+  border-radius: 20px;
+}
+
+/* Dossier 3-Column Grid */
+.dossier-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 1200px) {
+  .dossier-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Column 1: ID Card Layout */
+.id-card-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.id-photo-frame {
+  position: relative;
+  width: 140px;
+  height: 170px;
+  margin: 0 auto;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--border-active);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+  background: #050B14;
+}
+
+.id-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.id-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.id-photo-tag {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  font-size: 0.65rem;
+  text-align: center;
+  padding: 0.2rem;
+  color: var(--teal-neon);
+  letter-spacing: 0.05em;
+  font-family: var(--font-tech);
+  text-transform: uppercase;
+}
+
+.id-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: rgba(5, 11, 20, 0.4);
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(45, 75, 115, 0.25);
+}
+
+.id-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.88rem;
+  border-bottom: 1px dashed rgba(45, 75, 115, 0.2);
+  padding-bottom: 0.4rem;
+}
+.id-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.id-lbl {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.id-val {
+  color: var(--text-main);
+  text-align: right;
+  font-weight: 500;
+}
+
+.id-val.highlight {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.id-val.mono {
+  font-family: var(--font-mono);
+  color: var(--teal-neon);
+  letter-spacing: 0.05em;
+}
+
+/* Column 2: Evidence Duo */
+.evidence-duo {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.evidence-box {
+  background: rgba(5, 11, 20, 0.45);
+  border: 1px solid rgba(45, 75, 115, 0.3);
+  border-radius: 8px;
+  padding: 0.9rem;
+}
+
+.evidence-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+
+.evidence-name {
+  font-family: var(--font-tech);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.evidence-score {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: rgba(0, 173, 181, 0.15);
+  color: var(--teal-neon);
+  padding: 0.15rem 0.55rem;
+  border-radius: 4px;
+}
+
+.evidence-img-wrap {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  height: 130px;
+  background: #050B14;
+  margin-bottom: 0.5rem;
+}
+
+.evidence-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.evidence-overlay-tag {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  background: rgba(0, 0, 0, 0.8);
+  font-size: 0.65rem;
+  color: #10B981;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  font-family: var(--font-tech);
+  letter-spacing: 0.05em;
+}
+
+.biometric-compare-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  margin-bottom: 0.4rem;
+}
+
+.bio-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.bio-thumb img, .bio-thumb-placeholder {
+  width: 70px;
+  height: 80px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border-subtle);
+  background: #050B14;
+}
+
+.bio-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.bio-thumb span {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.bio-vs-badge {
+  font-family: var(--font-tech);
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: rgba(45, 75, 115, 0.3);
+  color: var(--teal-neon);
+  padding: 0.35rem 0.5rem;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 173, 181, 0.3);
+}
+
+.evidence-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* Column 3: 5-Point Security Clearance Checklist */
+.checklist-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.checkpoint-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.75rem 0.9rem;
+  background: rgba(5, 11, 20, 0.45);
+  border: 1px solid rgba(45, 75, 115, 0.25);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.checkpoint-card.status-pass {
+  border-left: 3px solid #10B981;
+}
+
+.checkpoint-card.status-fail {
+  border-left: 3px solid #EF4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.checkpoint-card.status-warn {
+  border-left: 3px solid #F59E0B;
+}
+
+.checkpoint-card.status-info {
+  border-left: 3px solid #3B82F6;
+}
+
+.cp-icon {
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+.cp-body {
+  flex: 1;
+}
+
+.cp-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.cp-title {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+}
+
+.cp-badge {
+  font-family: var(--font-tech);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.cp-badge.pass { background: rgba(16, 185, 129, 0.2); color: #10B981; }
+.cp-badge.fail { background: rgba(239, 68, 68, 0.2); color: #F87171; }
+.cp-badge.warn { background: rgba(245, 158, 11, 0.2); color: #FBBF24; }
+.cp-badge.info { background: rgba(59, 130, 246, 0.2); color: #60A5FA; }
+
+.cp-detail {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.officer-decision-box {
+  background: rgba(0, 173, 181, 0.08);
+  border: 1px solid rgba(0, 173, 181, 0.25);
+  border-radius: 8px;
+  padding: 0.85rem;
+}
+
+.officer-box-title {
+  font-family: var(--font-tech);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--teal-neon);
+  margin-bottom: 0.3rem;
+}
+
+.officer-box-text {
+  font-size: 0.82rem;
+  color: var(--text-main);
+  line-height: 1.4;
+}
+
+/* Dossier Deep Links */
+.dossier-deep-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: rgba(10, 19, 34, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.deep-links-label {
+  font-family: var(--font-tech);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.btn-dossier-link {
+  background: rgba(14, 28, 48, 0.8);
+  border: 1px solid rgba(45, 75, 115, 0.4);
+  color: var(--text-main);
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-family: var(--font-display);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-dossier-link:hover {
+  background: var(--teal-glow);
+  border-color: var(--teal-neon);
+  color: #fff;
+  transform: translateY(-1px);
+}
+

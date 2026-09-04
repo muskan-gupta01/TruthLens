@@ -225,13 +225,28 @@ def analyze_photo_splice(
     face_diff = diff_gray[y:y+h, x:x+w]
     face_mean = float(np.mean(face_diff))
 
-    # Mask out face to get background mean
-    bg_mask = np.ones_like(diff_gray, dtype=bool)
-    bg_mask[y:y+h, x:x+w] = False
-    bg_mean = float(np.mean(diff_gray[bg_mask]))
+    # Sample localized card substrate margin immediately surrounding the portrait
+    pad_w = int(w * 0.40)
+    pad_h = int(h * 0.40)
+    x1 = max(0, x - pad_w)
+    y1 = max(0, y - pad_h)
+    x2 = min(w_img, x + w + pad_w)
+    y2 = min(h_img, y + h + pad_h)
+
+    local_bg_mask = np.zeros_like(diff_gray, dtype=bool)
+    local_bg_mask[y1:y2, x1:x2] = True
+    local_bg_mask[y:y+h, x:x+w] = False
+
+    if np.any(local_bg_mask):
+        bg_mean = float(np.mean(diff_gray[local_bg_mask]))
+    else:
+        bg_mask = np.ones_like(diff_gray, dtype=bool)
+        bg_mask[y:y+h, x:x+w] = False
+        bg_mean = float(np.mean(diff_gray[bg_mask]))
 
     ratio = face_mean / max(0.1, bg_mean)
-    is_spliced = (ratio > 2.05 and face_mean > 1.2) or (ratio < 0.35 and bg_mean > 2.0)
+    # A genuine digital splice shows distinct localized compression divergence
+    is_spliced = (ratio > 2.85 and face_mean > 3.0) or (ratio < 0.25 and bg_mean > 4.5)
 
     # Check high-frequency noise disparity if cv_img is supplied
     noise_ratio = 1.0
@@ -241,9 +256,10 @@ def analyze_photo_splice(
             blur = cv2.GaussianBlur(gray, (5, 5), 0)
             noise = np.abs(gray - blur)
             face_noise = float(np.mean(noise[y:y+h, x:x+w]))
-            bg_noise = float(np.mean(noise[bg_mask]))
+            ref_mask = local_bg_mask if np.any(local_bg_mask) else bg_mask
+            bg_noise = float(np.mean(noise[ref_mask]))
             noise_ratio = face_noise / max(0.1, bg_noise)
-            if noise_ratio > 2.4 or noise_ratio < 0.32:
+            if (noise_ratio > 3.2 or noise_ratio < 0.25) and face_mean > 2.5:
                 is_spliced = True
         except Exception:
             pass

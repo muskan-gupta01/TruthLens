@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
-  <link rel="stylesheet" href="/static/css/style.css?v=3.0" />
+  <link rel="stylesheet" href="/static/css/style.css?v=5.0" />
 </head>
 <body>
   <!-- Ambient Cyber Background -->
@@ -305,6 +305,22 @@
               </select>
             </div>
 
+            <!-- Optional Identity Confirmation Inputs -->
+            <div class="manual-id-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="doc-number-input" class="form-label" style="font-size: 0.8rem; color: #94a3b8;">
+                  Document / PAN No: <span style="font-weight: normal; color: #64748b;">(Optional)</span>
+                </label>
+                <input type="text" id="doc-number-input" class="form-select" placeholder="Auto-detect or enter" style="font-size: 0.82rem; text-transform: uppercase;" />
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="person-name-input" class="form-label" style="font-size: 0.8rem; color: #94a3b8;">
+                  Passenger Name: <span style="font-weight: normal; color: #64748b;">(Optional)</span>
+                </label>
+                <input type="text" id="person-name-input" class="form-select" placeholder="Auto-detect or enter" style="font-size: 0.82rem;" />
+              </div>
+            </div>
+
             <!-- Drag & Drop Dropzone -->
             <div class="dropzone" id="doc-dropzone">
               <input type="file" id="doc-file-input" accept="image/jpeg,image/png,image/jpg" class="file-input-hidden" />
@@ -380,6 +396,243 @@
             <p id="processing-status-sub">Running OCR extraction, MRZ decoding, ELA image forensics, and biometric face match...</p>
           </div>
         </div>
+      </div>
+
+      <!-- ============================================================= -->
+      <!-- UNIFIED MASTER FORENSIC SCREENING DOSSIER (LIVE RESULT)       -->
+      <!-- ============================================================= -->
+      <div class="master-dossier-wrapper hidden" id="master-dossier-wrapper">
+        
+        <!-- Section Header Bar -->
+        <div class="dossier-header-bar">
+          <div class="dossier-header-title">
+            <span class="pulse-indicator"></span>
+            <h2>Official Screening Result &amp; Forensic Dossier</h2>
+            <span class="dossier-id-badge" id="dossier-screening-id">ID: --</span>
+          </div>
+          <div class="dossier-header-actions">
+            <span class="dossier-time" id="dossier-timestamp">--</span>
+            <button type="button" class="cyber-btn btn-sm btn-print-report" id="dossier-btn-print">
+              <span>🖨️ Download Certificate</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Master Verdict Banner -->
+        <div class="dossier-verdict-banner" id="dossier-verdict-banner">
+          <div class="verdict-banner-left">
+            <div class="verdict-status-icon" id="dossier-verdict-icon">🛡️</div>
+            <div class="verdict-status-info">
+              <span class="verdict-kicker" id="dossier-verdict-kicker">AUTOMATED BORDER SCREENING DECISION</span>
+              <h1 class="verdict-main-text" id="dossier-verdict-text">VERIFIED / AUTHENTIC</h1>
+              <p class="verdict-reason-text" id="dossier-verdict-reason">
+                Document verified authentic across optical, mathematical, and forensic checks.
+              </p>
+            </div>
+          </div>
+          <div class="verdict-banner-right">
+            <div class="dossier-gauge-mini">
+              <div class="gauge-value" id="dossier-risk-score">0</div>
+              <div class="gauge-label">RISK SCORE / 100</div>
+            </div>
+            <div class="dossier-tier-badge" id="dossier-risk-tier">LOW RISK</div>
+          </div>
+        </div>
+
+        <!-- 3-Column Dossier Content Grid -->
+        <div class="dossier-grid">
+          
+          <!-- Column 1: Passenger ID Profile Card -->
+          <div class="cyber-card dossier-id-card">
+            <div class="card-header">
+              <h3>🪪 Identity Profile</h3>
+              <span class="badge-tech" id="dossier-doc-type-badge">PASSPORT</span>
+            </div>
+            <div class="card-body">
+              <div class="id-card-layout">
+                <div class="id-photo-frame">
+                  <img id="dossier-face-crop-img" src="" alt="Passenger Face" class="hidden" />
+                  <div class="id-photo-placeholder" id="dossier-face-placeholder">👤 No Face Crop</div>
+                  <span class="id-photo-tag">Document Portrait</span>
+                </div>
+                <div class="id-details-list">
+                  <div class="id-row">
+                    <span class="id-lbl">Full Name</span>
+                    <strong class="id-val highlight" id="dossier-val-name">--</strong>
+                  </div>
+                  <div class="id-row">
+                    <span class="id-lbl">Document No</span>
+                    <strong class="id-val mono" id="dossier-val-number">--</strong>
+                  </div>
+                  <div class="id-row">
+                    <span class="id-lbl">Nationality</span>
+                    <span class="id-val" id="dossier-val-country">--</span>
+                  </div>
+                  <div class="id-row">
+                    <span class="id-lbl">Date of Birth</span>
+                    <span class="id-val" id="dossier-val-dob">--</span>
+                  </div>
+                  <div class="id-row">
+                    <span class="id-lbl">Expiry Date</span>
+                    <span class="id-val" id="dossier-val-expiry">--</span>
+                  </div>
+                  <div class="id-row">
+                    <span class="id-lbl">Validity Status</span>
+                    <span class="badge-green" id="dossier-val-validity">ACTIVE / VALID</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 2: Visual Forensic Evidence (Heatmap & Biometrics) -->
+          <div class="cyber-card dossier-evidence-card">
+            <div class="card-header">
+              <h3>🔬 Visual Forensic Evidence</h3>
+              <span class="badge-tech">Dual Scan</span>
+            </div>
+            <div class="card-body">
+              <div class="evidence-duo">
+                
+                <!-- Forensic ELA Heatmap Box -->
+                <div class="evidence-box">
+                  <div class="evidence-title-row">
+                    <span class="evidence-name">Tamper Heatmap (ELA)</span>
+                    <span class="evidence-score" id="dossier-ela-score-badge">0.0% Tamper Index</span>
+                  </div>
+                  <div class="evidence-img-wrap">
+                    <img id="dossier-ela-heatmap-img" src="" alt="ELA Tamper Heatmap" />
+                    <div class="evidence-overlay-tag" id="dossier-ela-tag">UNIFORM COMPRESSION</div>
+                  </div>
+                  <p class="evidence-desc" id="dossier-ela-desc">
+                    Error Level Analysis isolates resaved JPEG compression grids to expose spliced portraits and modified text.
+                  </p>
+                </div>
+
+                <!-- Biometric Face Match Box -->
+                <div class="evidence-box">
+                  <div class="evidence-title-row">
+                    <span class="evidence-name">1:1 Biometric Comparison</span>
+                    <span class="evidence-score" id="dossier-face-match-badge">0% Match</span>
+                  </div>
+                  <div class="biometric-compare-row">
+                    <div class="bio-thumb">
+                      <img id="dossier-bio-doc-face" src="" alt="Doc Portrait" class="hidden" />
+                      <div class="bio-thumb-placeholder" id="dossier-bio-doc-ph">Doc Face</div>
+                      <span>Document</span>
+                    </div>
+                    <div class="bio-vs-badge" id="dossier-bio-vs">VS</div>
+                    <div class="bio-thumb">
+                      <img id="dossier-bio-live-face" src="" alt="Live Passenger" class="hidden" />
+                      <div class="bio-thumb-placeholder" id="dossier-bio-live-ph">Live Photo</div>
+                      <span>Live Photo</span>
+                    </div>
+                  </div>
+                  <p class="evidence-desc" id="dossier-bio-desc">
+                    Deep learning facial feature vector comparison (YuNet + SFace 128-d cosine distance).
+                  </p>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 3: 5-Point Security Clearance Checklist -->
+          <div class="cyber-card dossier-checklist-card">
+            <div class="card-header">
+              <h3>🛡️ 5-Point Security Clearance</h3>
+              <span class="badge-tech" id="dossier-checks-count">5 Checks</span>
+            </div>
+            <div class="card-body">
+              <div class="checklist-stack" id="dossier-checklist-stack">
+                <!-- Dynamically populated -->
+              </div>
+              <div class="officer-decision-box" id="dossier-officer-box">
+                <div class="officer-box-title">👮 Border Officer Protocol:</div>
+                <p class="officer-box-text" id="dossier-officer-rec">
+                  Clear for transit. Document verified authentic across optical, mathematical, and forensic layers.
+                </p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Full-Width Hugging Face AI Officer Copilot Card -->
+        <div class="cyber-card dossier-hf-card" id="dossier-hf-card" style="margin-top: 20px; border-color: rgba(59, 130, 246, 0.4); background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));">
+          <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.5rem;">🤗</span>
+              <div>
+                <h3 style="margin: 0; font-size: 1.1rem; color: #f8fafc;">Hugging Face AI Officer Copilot</h3>
+                <small style="color: #94a3b8; font-size: 0.78rem;">Autonomous Legal &amp; Forensic Intelligence Briefing (SIH26188 • Ministry of Home Affairs)</small>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span class="badge-tech" id="dossier-hf-model-badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4);">🤗 Mistral-7B / Qwen-2.5</span>
+              <button type="button" class="cyber-btn btn-sm btn-outline" id="btn-refresh-llm" style="padding: 4px 10px; font-size: 0.75rem;">
+                🔄 Regenerate
+              </button>
+            </div>
+          </div>
+          <div class="card-body" style="padding-top: 16px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+              
+              <!-- Left: Executive Summary & Evidence -->
+              <div>
+                <div style="margin-bottom: 14px;">
+                  <h4 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #38bdf8; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    🛡️ Executive Assessment
+                  </h4>
+                  <p id="dossier-hf-summary" style="font-size: 0.88rem; line-height: 1.5; color: #e2e8f0; margin: 0; background: rgba(0, 0, 0, 0.25); padding: 10px 12px; border-radius: 6px; border-left: 3px solid #38bdf8;">
+                    Analyzing transaction data...
+                  </p>
+                </div>
+                <div>
+                  <h4 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a78bfa; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    🔬 Forensic &amp; Biometric Evidence
+                  </h4>
+                  <p id="dossier-hf-evidence" style="font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; margin: 0; background: rgba(0, 0, 0, 0.25); padding: 10px 12px; border-radius: 6px; border-left: 3px solid #a78bfa;">
+                    Evaluating compression artifacts and facial landmark embeddings...
+                  </p>
+                </div>
+              </div>
+
+              <!-- Right: Legal Grounds & Protocol -->
+              <div>
+                <div style="margin-bottom: 14px;">
+                  <h4 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #fbbf24; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    ⚖️ Statutory Grounds (Indian Law)
+                  </h4>
+                  <p id="dossier-hf-legal" style="font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; margin: 0; background: rgba(0, 0, 0, 0.25); padding: 10px 12px; border-radius: 6px; border-left: 3px solid #fbbf24;">
+                    Mapping statutory compliance under Passports Act 1967 &amp; IPC 463/468/471...
+                  </p>
+                </div>
+                <div>
+                  <h4 style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #34d399; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    🚨 Officer Operational Protocol
+                  </h4>
+                  <p id="dossier-hf-protocol" style="font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; margin: 0; background: rgba(0, 0, 0, 0.25); padding: 10px 12px; border-radius: 6px; border-left: 3px solid #34d399;">
+                    Awaiting protocol instructions...
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Navigation Footer to Deep Technical Tabs -->
+        <div class="dossier-deep-links">
+          <span class="deep-links-label">🔍 Deep Technical Audits:</span>
+          <button type="button" class="btn-dossier-link" data-goto="tab-ocr">📄 Raw OCR &amp; MRZ</button>
+          <button type="button" class="btn-dossier-link" data-goto="tab-validation">⚖️ Mathematical Rules</button>
+          <button type="button" class="btn-dossier-link" data-goto="tab-tampering">🔬 ELA Matrix Analysis</button>
+          <button type="button" class="btn-dossier-link" data-goto="tab-face">👤 Biometric Embedding</button>
+          <button type="button" class="btn-dossier-link" data-goto="tab-risk">⚡ Full Risk Breakdown</button>
+          <button type="button" class="btn-dossier-link" data-goto="tab-history">🕒 Screening Log</button>
+        </div>
+
       </div>
     </section>
 
@@ -871,6 +1124,6 @@
   </div>
 
   <!-- Client Application Script -->
-  <script src="/static/js/app.js?v=3.0"></script>
+  <script src="/static/js/app.js?v=5.0"></script>
 </body>
 </html>

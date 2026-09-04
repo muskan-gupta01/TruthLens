@@ -288,27 +288,32 @@ def compare_faces(
 
     if deep_score is not None:
         if is_monochrome:
-            # For B&W Aadhaar cards / photocopies, ignore color and rely on deep embeddings + structure
             combined = (deep_score * 0.75) + (tmpl_score * 0.25)
         else:
-            # Multi-modal fusion: 50% Deep Landmark Embedding + 35% Color Chrominance + 15% Structural Template
-            combined = (deep_score * 0.50) + (hist_corr * 0.35) + (tmpl_score * 0.15)
+            combined = (deep_score * 0.55) + (hist_corr * 0.30) + (tmpl_score * 0.15)
 
         match_pct = round(min(100.0, max(0.0, combined * 100.0)), 1)
         confidence = round(min(99.0, max(85.0, 80.0 + (abs(match_pct - 50.0) * 0.38))), 1)
+
+        # Calibrated decision thresholds
+        if match_pct >= 40.0:
+            verdict = "MATCH"
+        elif match_pct >= 34.0:
+            verdict = "POSSIBLE MISMATCH"
+        else:
+            verdict = "MISMATCH"
     else:
-        # Heuristic fallback
+        # Heuristic fallback when DNN models are unavailable
         combined = (hist_corr * 0.55) + (tmpl_score * 0.45)
         match_pct = round(min(100.0, max(0.0, combined * 100.0)), 1)
         confidence = round(min(90.0, 75.0 + (abs(match_pct - 50.0) * 0.30)), 1)
 
-    # Calibrated decision thresholds
-    if match_pct >= 62.0:
-        verdict = "MATCH"
-    elif match_pct >= 48.0:
-        verdict = "POSSIBLE MISMATCH"
-    else:
-        verdict = "MISMATCH"
+        if match_pct >= 40.0:
+            verdict = "MATCH"
+        elif match_pct >= 34.0:
+            verdict = "POSSIBLE MISMATCH"
+        else:
+            verdict = "MISMATCH"
 
     return match_pct, confidence, verdict, engine_name
 

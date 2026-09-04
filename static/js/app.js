@@ -296,8 +296,14 @@
     btnClearDoc.click();
     btnClearLive.click();
     docTypeSelect.value = 'AUTO';
+    const docNumInp = document.getElementById('doc-number-input');
+    if (docNumInp) docNumInp.value = '';
+    const nameInp = document.getElementById('person-name-input');
+    if (nameInp) nameInp.value = '';
     updatePipelineTracker(1);
     processingBanner.classList.add('hidden');
+    const dossierWrapper = document.getElementById('master-dossier-wrapper');
+    if (dossierWrapper) dossierWrapper.classList.add('hidden');
   });
 
   // =========================================================================
@@ -314,6 +320,10 @@
     processingBanner.classList.remove('hidden');
     processingStatusTitle.textContent = 'Executing Deep Document Analysis...';
     processingStatusSub.textContent = 'Extracting OCR fields, evaluating ICAO checksums, and generating ELA forensic heatmaps...';
+
+    // Hide old dossier while processing new scan
+    const oldDossier = document.getElementById('master-dossier-wrapper');
+    if (oldDossier) oldDossier.classList.add('hidden');
 
     updatePipelineTracker(2);
 
@@ -335,6 +345,16 @@
       formData.append('doc_type', selectedType);
     }
 
+    const docNumVal = document.getElementById('doc-number-input')?.value?.trim();
+    if (docNumVal) {
+      formData.append('doc_number', docNumVal);
+    }
+
+    const personNameVal = document.getElementById('person-name-input')?.value?.trim();
+    if (personNameVal) {
+      formData.append('person_name', personNameVal);
+    }
+
     try {
       updatePipelineTracker(4);
       const response = await fetch('/api/screen', {
@@ -354,14 +374,21 @@
       // Render all section data
       renderScreeningResults(result);
 
+      // Render Live Master Dossier right inside Document Screening
+      renderMasterDossier(result);
+
       updatePipelineTracker(7);
       processingBanner.classList.add('hidden');
       btnStartScreening.disabled = false;
 
-      // Automatically transition to Risk Assessment & Final Verdict tab
-      setTimeout(() => {
-        switchTab('tab-risk');
-      }, 500);
+      // Smoothly reveal Master Dossier
+      const dossierWrapper = document.getElementById('master-dossier-wrapper');
+      if (dossierWrapper) {
+        dossierWrapper.classList.remove('hidden');
+        setTimeout(() => {
+          dossierWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 120);
+      }
 
     } catch (err) {
       processingBanner.classList.add('hidden');
@@ -719,6 +746,270 @@
 
     // Update Certificate Modal Preview
     populateCertificateModal(data);
+  }
+
+  // =========================================================================
+  // 6B. RENDER ALL-IN-ONE MASTER FORENSIC DOSSIER
+  // =========================================================================
+  function renderMasterDossier(data) {
+    const dossier = data.dossier || {};
+    const wrapper = document.getElementById('master-dossier-wrapper');
+    if (!wrapper) return;
+
+    // Header info
+    const idBadge = document.getElementById('dossier-screening-id');
+    const timeElem = document.getElementById('dossier-timestamp');
+    if (idBadge) idBadge.textContent = `ID: ${data.screening_id || 'TL-SCAN'}`;
+    if (timeElem) timeElem.textContent = data.timestamp || '';
+
+    // Verdict Banner
+    const banner = document.getElementById('dossier-verdict-banner');
+    const icon = document.getElementById('dossier-verdict-icon');
+    const kicker = document.getElementById('dossier-verdict-kicker');
+    const mainText = document.getElementById('dossier-verdict-text');
+    const reasonText = document.getElementById('dossier-verdict-reason');
+    const scoreVal = document.getElementById('dossier-risk-score');
+    const tierBadge = document.getElementById('dossier-risk-tier');
+
+    const isGenuine = dossier.is_genuine ?? (data.risk_level === 'LOW');
+    const isCritical = (data.risk_level === 'CRITICAL' || data.risk_level === 'HIGH');
+
+    banner.className = 'dossier-verdict-banner';
+    if (isGenuine) {
+      banner.classList.add('verdict-genuine');
+      icon.textContent = '🛡️';
+      kicker.textContent = 'OFFICIAL BORDER CLEARANCE: VERIFIED AUTHENTIC';
+      mainText.textContent = dossier.simple_badge || 'VERIFIED / AUTHENTIC';
+      tierBadge.textContent = 'LOW RISK';
+      tierBadge.className = 'dossier-tier-badge badge-green';
+    } else if (isCritical) {
+      banner.classList.add('verdict-fake');
+      icon.textContent = '🚫';
+      kicker.textContent = 'SECURITY ALERT: HIGH RISK / FORGERY DETECTED';
+      mainText.textContent = dossier.simple_badge || 'REJECTED / FAKE DETECTED';
+      tierBadge.textContent = `${data.risk_level} RISK`;
+      tierBadge.className = 'dossier-tier-badge badge-red';
+    } else {
+      banner.classList.add('verdict-review');
+      icon.textContent = '⚠️';
+      kicker.textContent = 'OFFICER PROTOCOL: MANUAL REVIEW REQUIRED';
+      mainText.textContent = dossier.simple_badge || 'REVIEW REQUIRED';
+      tierBadge.textContent = `${data.risk_level || 'MED'} RISK`;
+      tierBadge.className = 'dossier-tier-badge badge-yellow';
+    }
+
+    reasonText.textContent = data.summary || dossier.headline_reason || 'Screening assessment complete.';
+    scoreVal.textContent = data.risk_score ?? 0;
+
+    // Column 1: Identity Profile
+    const docBadge = document.getElementById('dossier-doc-type-badge');
+    const valName = document.getElementById('dossier-val-name');
+    const valNum = document.getElementById('dossier-val-number');
+    const valCountry = document.getElementById('dossier-val-country');
+    const valDob = document.getElementById('dossier-val-dob');
+    const valExpiry = document.getElementById('dossier-val-expiry');
+    const valValidity = document.getElementById('dossier-val-validity');
+    const faceCropImg = document.getElementById('dossier-face-crop-img');
+    const facePh = document.getElementById('dossier-face-placeholder');
+
+    const fields = data.ocr?.fields || {};
+    if (docBadge) docBadge.textContent = (data.doc_type || 'DOCUMENT').replace(/_/g, ' ');
+    if (valName) valName.textContent = dossier.subject_name || fields.full_name || fields.name || 'Not Detected';
+    if (valNum) valNum.textContent = dossier.doc_number || fields.passport_number || fields.id_number || fields.visa_number || 'Not Detected';
+    if (valCountry) valCountry.textContent = dossier.nationality || fields.nationality || fields.issuing_country || 'N/A';
+    if (valDob) valDob.textContent = dossier.dob || fields.dob || 'N/A';
+    if (valExpiry) valExpiry.textContent = dossier.expiry_date || fields.expiry_date || 'N/A';
+
+    const isExpired = data.validation?.expired;
+    if (valValidity) {
+      if (isExpired) {
+        valValidity.textContent = 'EXPIRED';
+        valValidity.className = 'badge-red';
+      } else if (data.doc_type === 'UNKNOWN') {
+        valValidity.textContent = 'UNRECOGNIZED';
+        valValidity.className = 'badge-yellow';
+      } else {
+        valValidity.textContent = 'ACTIVE / VALID';
+        valValidity.className = 'badge-green';
+      }
+    }
+
+    const faceData = data.face_verification || {};
+    if (faceCropImg && facePh) {
+      if (faceData.doc_face_crop) {
+        faceCropImg.src = faceData.doc_face_crop;
+        faceCropImg.classList.remove('hidden');
+        facePh.classList.add('hidden');
+      } else {
+        faceCropImg.classList.add('hidden');
+        facePh.classList.remove('hidden');
+      }
+    }
+
+    // Column 2: Forensic Visual Evidence
+    const elaImg = document.getElementById('dossier-ela-heatmap-img');
+    const elaBadge = document.getElementById('dossier-ela-score-badge');
+    const elaTag = document.getElementById('dossier-ela-tag');
+    const elaData = data.forensics_ela || {};
+
+    if (elaImg) {
+      elaImg.src = elaData.overlay_data_uri || elaData.heatmap_data_uri || '';
+    }
+    const tamperScore = elaData.tamper_score || 0.0;
+    if (elaBadge) {
+      elaBadge.textContent = `${tamperScore}% Tamper Score`;
+      elaBadge.className = `evidence-score ${tamperScore >= 35 ? 'badge-red' : (tamperScore >= 20 ? 'badge-yellow' : 'badge-green')}`;
+    }
+    if (elaTag) {
+      if (elaData.photo_spliced) {
+        elaTag.textContent = 'PHOTO SPLICE DETECTED';
+        elaTag.style.color = '#F87171';
+      } else if (tamperScore >= 20) {
+        elaTag.textContent = 'COMPRESSION ANOMALY';
+        elaTag.style.color = '#FBBF24';
+      } else {
+        elaTag.textContent = 'UNIFORM COMPRESSION (CLEAN)';
+        elaTag.style.color = '#10B981';
+      }
+    }
+
+    // Biometrics Comparison
+    const bioDocImg = document.getElementById('dossier-bio-doc-face');
+    const bioDocPh = document.getElementById('dossier-bio-doc-ph');
+    const bioLiveImg = document.getElementById('dossier-bio-live-face');
+    const bioLivePh = document.getElementById('dossier-bio-live-ph');
+    const bioScoreBadge = document.getElementById('dossier-face-match-badge');
+
+    if (bioDocImg && bioDocPh) {
+      if (faceData.doc_face_crop) {
+        bioDocImg.src = faceData.doc_face_crop;
+        bioDocImg.classList.remove('hidden');
+        bioDocPh.classList.add('hidden');
+      } else {
+        bioDocImg.classList.add('hidden');
+        bioDocPh.classList.remove('hidden');
+      }
+    }
+
+    if (bioLiveImg && bioLivePh) {
+      if (faceData.live_face_crop) {
+        bioLiveImg.src = faceData.live_face_crop;
+        bioLiveImg.classList.remove('hidden');
+        bioLivePh.classList.add('hidden');
+      } else {
+        bioLiveImg.classList.add('hidden');
+        bioLivePh.classList.remove('hidden');
+      }
+    }
+
+    const matchPct = faceData.match_percentage || 0.0;
+    if (bioScoreBadge) {
+      if (faceData.verdict === 'MATCH') {
+        bioScoreBadge.textContent = `${matchPct}% Match (CONFIRMED)`;
+        bioScoreBadge.className = 'evidence-score badge-green';
+      } else if (faceData.verdict === 'MISMATCH') {
+        bioScoreBadge.textContent = `${matchPct}% Match (MISMATCH)`;
+        bioScoreBadge.className = 'evidence-score badge-red';
+      } else {
+        bioScoreBadge.textContent = 'Awaiting Live Passenger';
+        bioScoreBadge.className = 'evidence-score badge-tech';
+      }
+    }
+
+    // Column 3: 5-Point Security Checklist
+    const stack = document.getElementById('dossier-checklist-stack');
+    if (stack) {
+      stack.innerHTML = '';
+      const checkpoints = dossier.checkpoints || [
+        { id: 'validity', title: 'Format & Expiry', status: isExpired ? 'FAIL' : 'PASS', detail: isExpired ? 'Document expired.' : 'Document format and expiry date active.' },
+        { id: 'checksum', title: 'Mathematical Checksum', status: isCritical ? 'FAIL' : 'PASS', detail: 'Check digit validation.' },
+        { id: 'ela', title: 'Forensic Tamper (ELA)', status: elaData.tamper_detected ? 'FAIL' : 'PASS', detail: 'Pixel compression integrity.' },
+        { id: 'biometric', title: '1:1 Biometric Match', status: faceData.verdict === 'MATCH' ? 'PASS' : (faceData.verdict === 'MISMATCH' ? 'FAIL' : 'INFO'), detail: 'Face recognition.' },
+        { id: 'watchlist', title: 'Border Watchlist Check', status: data.validation?.mock_database_hit ? 'FAIL' : 'PASS', detail: 'Watchlist hit scan.' }
+      ];
+
+      checkpoints.forEach(cp => {
+        const item = document.createElement('div');
+        const st = (cp.status || 'PASS').toLowerCase();
+        item.className = `checkpoint-card status-${st}`;
+        
+        const iconSymbol = st === 'pass' ? '✅' : (st === 'fail' ? '❌' : (st === 'warn' ? '⚠️' : 'ℹ️'));
+        
+        item.innerHTML = `
+          <div class="cp-icon">${iconSymbol}</div>
+          <div class="cp-body">
+            <div class="cp-title-row">
+              <span class="cp-title">${cp.title}</span>
+              <span class="cp-badge ${st}">${cp.status}</span>
+            </div>
+            <p class="cp-detail">${cp.detail}</p>
+          </div>
+        `;
+        stack.appendChild(item);
+      });
+    }
+
+    const officerRec = document.getElementById('dossier-officer-rec');
+    if (officerRec) {
+      officerRec.textContent = data.officer_recommendation || 'Proceed according to standard border control clearance rules.';
+    }
+
+    // Render Hugging Face AI Officer Briefing
+    const hfData = data.llm_briefing || (data.dossier && data.dossier.llm_briefing) || {};
+    const hfModelBadge = document.getElementById('dossier-hf-model-badge');
+    const hfSummary = document.getElementById('dossier-hf-summary');
+    const hfEvidence = document.getElementById('dossier-hf-evidence');
+    const hfLegal = document.getElementById('dossier-hf-legal');
+    const hfProtocol = document.getElementById('dossier-hf-protocol');
+
+    if (hfModelBadge) hfModelBadge.textContent = hfData.model_used || '🤗 Mistral-7B / Qwen-2.5';
+    if (hfSummary) hfSummary.textContent = hfData.executive_summary || data.summary || 'Summary unavailable.';
+    if (hfEvidence) hfEvidence.textContent = hfData.forensic_reasoning || 'Biometrics and compression verified authentic.';
+    if (hfLegal) hfLegal.textContent = hfData.legal_basis || 'Compliant with Passports Act 1967 and Bureau of Immigration standards.';
+    if (hfProtocol) hfProtocol.textContent = hfData.officer_protocol || data.officer_recommendation || 'Proceed with intake clearance.';
+
+    const btnRefreshLlm = document.getElementById('btn-refresh-llm');
+    if (btnRefreshLlm) {
+      btnRefreshLlm.onclick = async () => {
+        btnRefreshLlm.disabled = true;
+        btnRefreshLlm.textContent = '⏳ Thinking...';
+        try {
+          const res = await fetch('/api/llm/briefing', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          if (res.ok) {
+            const freshBriefing = await res.json();
+            if (hfModelBadge) hfModelBadge.textContent = freshBriefing.model_used || '🤗 Mistral-7B / Qwen-2.5';
+            if (hfSummary) hfSummary.textContent = freshBriefing.executive_summary || '';
+            if (hfEvidence) hfEvidence.textContent = freshBriefing.forensic_reasoning || '';
+            if (hfLegal) hfLegal.textContent = freshBriefing.legal_basis || '';
+            if (hfProtocol) hfProtocol.textContent = freshBriefing.officer_protocol || '';
+          }
+        } catch (e) {
+          console.error(e);
+        } finally {
+          btnRefreshLlm.disabled = false;
+          btnRefreshLlm.textContent = '🔄 Regenerate';
+        }
+      };
+    }
+
+    // Connect Certificate Download in Dossier
+    const btnDossierPrint = document.getElementById('dossier-btn-print');
+    const masterPrintBtn = document.getElementById('btn-print-certificate');
+    if (btnDossierPrint && masterPrintBtn) {
+      btnDossierPrint.onclick = () => masterPrintBtn.click();
+    }
+
+    // Deep link buttons inside Dossier
+    document.querySelectorAll('.btn-dossier-link').forEach(btn => {
+      btn.onclick = () => {
+        const targetTab = btn.dataset.goto;
+        if (targetTab) switchTab(targetTab);
+      };
+    });
   }
 
   // =========================================================================

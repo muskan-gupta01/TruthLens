@@ -204,7 +204,12 @@ def validate_passport_number(doc_num: Optional[str], mrz_data: Optional[Dict[str
 def validate_pan_number(pan_str: Optional[str]) -> Dict[str, Any]:
     """Validates Indian PAN structural format and 4th entity character."""
     if not pan_str:
-        return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": "PAN number missing"}
+        return {
+            "valid": True,
+            "status": "WARN",
+            "label": "⚠ Unreadable / Glare",
+            "message": "PAN number not detected via OCR. Verify document surface or re-scan under even lighting."
+        }
     clean_pan = pan_str.strip().upper()
     if not re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]$", clean_pan):
         return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": f"Invalid PAN format: '{clean_pan}'. Must be 5 letters, 4 digits, 1 letter."}
@@ -337,6 +342,8 @@ def validate_document_rules(
         })
         if res_num["status"] == "FAIL":
             total_failures += 1
+        elif res_num["status"] == "WARN":
+            total_warnings += 1
 
     elif doc_type == DOC_TYPE_VISA:
         if doc_num:

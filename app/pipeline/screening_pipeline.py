@@ -27,6 +27,7 @@ from app.pipeline.metadata_forensics import analyze_image_metadata
 from app.pipeline.face_verifier import verify_identity_face
 from app.pipeline.cross_verifier import cross_verify_documents
 from app.pipeline.risk_engine import compute_risk_assessment
+from app.pipeline.hf_llm_officer import generate_llm_officer_briefing
 from app.database.db_manager import log_screening
 from app.config import (
     DOC_TYPE_PASSPORT,
@@ -42,7 +43,9 @@ from app.config import (
 def run_truthlens_screening(
     doc_image_input,
     live_image_input = None,
-    doc_type_hint: Optional[str] = None
+    doc_type_hint: Optional[str] = None,
+    doc_number_override: Optional[str] = None,
+    person_name_override: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Executes the full end-to-end AI document screening pipeline.
@@ -51,6 +54,8 @@ def run_truthlens_screening(
     - doc_image_input: PIL Image or OpenCV numpy array of the document
     - live_image_input: Optional live webcam snapshot or presented person photo
     - doc_type_hint: Optional manual document type hint ('PASSPORT', 'VISA', etc.)
+    - doc_number_override: Optional user-confirmed identity or document number
+    - person_name_override: Optional user-confirmed passenger name
     
     Returns:
     - Complete structured screening audit report with risk score, ELA heatmap,
@@ -75,6 +80,25 @@ def run_truthlens_screening(
     doc_type = ocr_result.get("doc_type", DOC_TYPE_UNKNOWN)
     mrz_data = ocr_result.get("mrz")
     fields = ocr_result.get("fields", {})
+
+    # Apply manual identity overrides if provided (e.g. glare on phone camera)
+    if doc_number_override and doc_number_override.strip():
+        clean_num = doc_number_override.strip().upper()
+        if doc_type == DOC_TYPE_PASSPORT:
+            fields["passport_number"] = clean_num
+        elif doc_type == DOC_TYPE_VISA:
+            fields["visa_number"] = clean_num
+        elif doc_type == DOC_TYPE_DRIVING_LICENSE:
+            fields["license_number"] = clean_num
+        else:
+            fields["id_number"] = clean_num
+
+    if person_name_override and person_name_override.strip():
+        clean_name = person_name_override.strip().upper()
+        if doc_type in [DOC_TYPE_PASSPORT, DOC_TYPE_VISA, DOC_TYPE_DRIVING_LICENSE]:
+            fields["full_name"] = clean_name
+        else:
+            fields["name"] = clean_name
 
     # =========================================================================
     # STEP 2: QR CODE DECODE & CRYPTOGRAPHIC CROSS-VERIFICATION
@@ -179,6 +203,127 @@ def run_truthlens_screening(
     else:
         summary = f"HIGH RISK ALERT: Rejected due to {len(risk_report['factors'])} security violation(s) (Risk Score: {risk_score}/100)."
 
+    # Build 5 key security checkpoints for instant visual display
+    is_genuine = (risk_level == "LOW")
+    is_critical = (risk_level in ["CRITICAL", "HIGH"])
+
+    # 1. Format & Expiry
+    format_pass = validation_result.get("valid", False) and not validation_result.get("expired", False)
+    format_status = "PASS" if format_pass else ("FAIL" if validation_result.get("expired") else "WARN")
+    if validation_result.get("expired"):
+        format_detail = "EXPIRED: Document has surpassed its valid transit date."
+    elif doc_type == DOC_TYPE_UNKNOWN:
+        format_detail = "UNRECOGNIZED: Document structure does not match institutional formats."
+    else:
+        format_detail = f"VALID: Compliant {doc_type} format with active validity period."
+
+    # 2. Checksum (MRZ / Verhoeff / PAN)
+    checksum_status = "PASS"
+    checksum_detail = "Verified: Mathematical check digits valid."
+    if doc_type == DOC_TYPE_PASSPORT:
+        if mrz_data and mrz_data.get("checksums", {}).get("all_passed"):
+            checksum_status = "PASS"
+            checksum_detail = "ICAO 9303: All 7-3-1 check digits mathematically verified."
+        else:
+            checksum_status = "FAIL"
+            checksum_detail = "ICAO 9303 Checksum Mismatch: Optical character corruption or forged number."
+    elif doc_type == DOC_TYPE_AADHAAR:
+        v_passed = any(c.get("name") == "Verhoeff Checksum Algorithm" and c.get("status") == "PASS" for c in validation_result.get("checklist", []))
+        if v_passed:
+            checksum_status = "PASS"
+            checksum_detail = "UIDAI Verhoeff: Dihedral D5 checksum algorithm valid."
+        else:
+            checksum_status = "FAIL"
+            checksum_detail = "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number."
+    elif doc_type == DOC_TYPE_PAN:
+        pan_passed = any("PAN" in c.get("name", "") and c.get("status") == "PASS" for c in validation_result.get("checklist", []))
+        checksum_status = "PASS" if pan_passed else "FAIL"
+        checksum_detail = "Income Tax Dept 10-character structure valid." if pan_passed else "Invalid PAN entity structure."
+    else:
+        checksum_status = "PASS" if format_pass else "WARN"
+        checksum_detail = "Standard institutional syntax inspection."
+
+    # 3. Forensic ELA & Tampering
+    tamper_detected = forensics_result.get("tamper_detected", False) or forensics_result.get("splice_detected", False)
+    ela_status = "FAIL" if tamper_detected else "PASS"
+    if forensics_result.get("splice_detected"):
+        ela_detail = "Photo Splice Alert: Digital boundary splicing detected around portrait."
+    elif tamper_detected:
+        ela_detail = f"Tampering Alert: High compression anomaly ({forensics_result.get('tamper_score', 0)}% tamper index)."
+    else:
+        ela_detail = "Clean: Uniform compression matrix, no photo splicing or software edits."
+
+    # 4. Biometric Face Verification
+    face_status = face_result.get("status", "WAITING_FOR_LIVE_PASSENGER")
+    match_pct = face_result.get("similarity_percentage", 0.0)
+    if face_status == "MATCH":
+        biometric_status = "PASS"
+        biometric_detail = f"Biometric Match Confirmed ({match_pct}% facial similarity)."
+    elif face_status == "MISMATCH":
+        biometric_status = "FAIL"
+        biometric_detail = f"Biometric Impersonation Alert ({match_pct}% similarity below threshold)."
+    else:
+        biometric_status = "INFO"
+        biometric_detail = "Awaiting Live Passenger Photo for 1:1 Biometric Verification."
+
+    # 5. Watchlist & Mock DB
+    db_hit = validation_result.get("mock_db_hit", False)
+    if db_hit:
+        watchlist_status = "FAIL"
+        watchlist_detail = f"Alert: Flagged in Border Watchlist ({validation_result.get('mock_db_reason', 'Watchlist hit')})."
+    else:
+        watchlist_status = "PASS"
+        watchlist_detail = "Clear: Zero records found in simulated Interpol/Border watchlists."
+
+    # Simple verdict badge and headline
+    if is_genuine:
+        simple_badge = "VERIFIED AUTHENTIC"
+        simple_color = "green"
+        simple_headline = "Document Authentic • Passenger Cleared"
+    elif is_critical:
+        simple_badge = "REJECTED / SUSPICIOUS"
+        simple_color = "red"
+        simple_headline = "Security Violation • Transit Denied"
+    else:
+        simple_badge = "REVIEW REQUIRED"
+        simple_color = "yellow"
+        simple_headline = "Manual Inspection Required"
+
+    dossier = {
+        "is_genuine": is_genuine,
+        "simple_badge": simple_badge,
+        "simple_color": simple_color,
+        "simple_headline": simple_headline,
+        "subject_name": name_val or "Not Detected",
+        "doc_number": num_val or "Not Detected",
+        "nationality": fields.get("nationality") or fields.get("issuing_country") or "N/A",
+        "dob": fields.get("dob") or "N/A",
+        "expiry_date": fields.get("expiry_date") or "N/A",
+        "doc_type_display": doc_type.replace("_", " ").title(),
+        "has_live_photo": live_image_input is not None,
+        "face_match_pct": match_pct,
+        "face_status": face_status,
+        "ela_tamper_pct": forensics_result.get("tamper_score", 0.0),
+        "checkpoints": [
+            {"id": "validity", "title": "Format & Expiry", "status": format_status, "detail": format_detail},
+            {"id": "checksum", "title": "Mathematical Checksum", "status": checksum_status, "detail": checksum_detail},
+            {"id": "ela", "title": "Forensic Tamper (ELA)", "status": ela_status, "detail": ela_detail},
+            {"id": "biometric", "title": "1:1 Biometric Match", "status": biometric_status, "detail": biometric_detail},
+            {"id": "watchlist", "title": "Border Watchlist Check", "status": watchlist_status, "detail": watchlist_detail}
+        ]
+    }
+
+    # Generate Hugging Face / LLM AI Officer Intelligence Briefing
+    llm_briefing = generate_llm_officer_briefing({
+        "document_type": doc_type,
+        "extracted_fields": fields,
+        "risk_assessment": risk_report,
+        "forensics_ela": forensics_result,
+        "face_verification": face_result,
+        "validation": validation_result
+    })
+    dossier["llm_briefing"] = llm_briefing
+
     # Master audit record
     full_report = {
         "screening_id": screening_id,
@@ -191,6 +336,7 @@ def run_truthlens_screening(
         "summary": summary,
         "officer_recommendation": risk_report["officer_recommendation"],
         "elapsed_ms": elapsed_ms,
+        "dossier": dossier,
         "ocr": {
             "mean_confidence": ocr_result["mean_confidence"],
             "fields": fields,
@@ -209,7 +355,8 @@ def run_truthlens_screening(
         "face_verification": face_result,
         "cross_verification": cross_result,
         "risk_assessment": risk_report,
-        "explainability": explainability
+        "explainability": explainability,
+        "llm_briefing": llm_briefing
     }
 
     # Log to SQLite local database
