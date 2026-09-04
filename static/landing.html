@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TruthLens — Trust Every Identity. Verify Every Document.</title>
+  <meta name="description" content="TruthLens AI-powered verification platform for digital identity screening, document fraud analysis, and biometric verification.">
+  <!-- Modern Google Fonts matching Dashboard Website -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/landing.css?v=3.0">
+</head>
+
+<body>
+  <!-- Ambient Cyber Background -->
+  <div class="cyber-grid"></div>
+  <div class="glow-orb glow-teal"></div>
+  <div class="glow-orb glow-blue"></div>
+  <!-- Navigation Header -->
+  <header>
+    <a href="#home" class="logo-group">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          <circle cx="12" cy="11" r="2.5" />
+        </svg>
+      </div>
+      <div class="logo">Truth<span>Lens</span></div>
+    </a>
+
+    <nav>
+      <a href="#home">Home</a>
+      <a href="#solutions">Solutions</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#about-us">About Us</a>
+      <a href="/presentation" target="_blank">Presentation</a>
+    </nav>
+
+    <!-- Guest state buttons -->
+    <div class="header-buttons" id="guestHeaderButtons">
+      <button type="button" class="login-btn" id="openLogin">Log In</button>
+      <button type="button" class="signup-btn" id="openSignup">Sign Up</button>
+    </div>
+
+    <!-- Authenticated officer state badge -->
+    <div class="auth-user-badge" id="authUserBadge">
+      <span>👤</span>
+      <strong id="headerOfficerName">Officer</strong>
+      <button type="button" class="signout-link" id="btnSignOut" title="Sign Out">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="hero" id="home">
+    <div class="hero-text">
+      <span class="tag">AI-POWERED VERIFICATION</span>
+
+      <h1>Trust every identity.<br>Verify every document.</h1>
+
+      <p>
+        TruthLens helps businesses and border control agencies verify identities and travel documents quickly,
+        securely, and intelligently using institutional-grade AI and forensic technology.
+      </p>
+
+      <div class="hero-buttons">
+        <button type="button" class="primary-btn" id="getStarted" onclick="if(window.handleGetStartedClick){handleGetStartedClick(event);}else{window.location.href='/dashboard';}">
+          <span>Get Started</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+
+        <a class="learn-btn" href="#solutions">Learn More</a>
+      </div>
+    </div>
+
+    <div class="hero-image-box">
+      <img
+        src="https://fintechweekly.s3.amazonaws.com/article/993/Your_Identity_Is_Your_Most_Valuable_Asset__It_s_About_To_Become_Income__Too.png"
+        alt="AI identity and document verification"
+        loading="lazy"
+      >
+    </div>
+  </main>
+
+  <!-- Solutions Section -->
+  <section class="section" id="solutions">
+    <span class="tag">OUR SOLUTIONS</span>
+    <h2 class="section-title">Secure digital verification</h2>
+
+    <p class="section-description">
+      TruthLens provides intelligent tools to verify users, check documents,
+      and help protect platforms against fraud.
+    </p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="icon">🪪</div>
+        <h3>Identity Verification</h3>
+        <p>Verify users securely through identity information checks, mathematical checksums, and MRZ standard compliance.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">📄</div>
+        <h3>Document Screening</h3>
+        <p>Analyze travel documents optically and forensically to detect altered text, invalid fields, and tampered photos.</p>
+      </div>
+
+      <div class="card">
+        <div class="icon">🛡️</div>
+        <h3>Fraud Detection</h3>
+        <p>Use Error Level Analysis (ELA), cross-validation, and 128-D biometric face matching to identify suspicious activity.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section class="section how-section" id="how-it-works">
+    <span class="tag">HOW IT WORKS</span>
+    <h2 class="section-title">Verification in three simple steps</h2>
+
+    <p class="section-description">
+      TruthLens makes identity and document verification rapid, accurate, and seamless.
+    </p>
+
+    <div class="cards">
+      <div class="card step-card">
+        <div class="step-number">1</div>
+        <h3>Enter Details</h3>
+        <p>The officer or passenger uploads an identification document and an optional live photo.</p>
+      </div>
+
+      <div class="card step-card">
+        <div class="step-number">2</div>
+        <h3>AI Analysis</h3>
+        <p>Our multi-layer forensic engine runs OCR, checksum validation, ELA tampering checks, and 1:1 face matching.</p>
+      </div>
+
+      <div class="card step-card">
+        <div class="step-number">3</div>
+        <h3>Get Result</h3>
+        <p>Receive a comprehensive explainable risk audit, pass/review verdict, and downloadable border certificate.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- About Us Section -->
+  <section class="section" id="about-us">
+    <span class="tag">ABOUT US</span>
+    <h2 class="section-title">Meet our group members</h2>
+
+    <p class="section-description">
+      TruthLens engineering team for SIH26188 (Ministry of Home Affairs - Blockchain &amp; Cybersecurity).
+    </p>
+
+    <div class="cards">
+      <div class="card member-card">
+        <div class="avatar">1</div>
+        <h3>Agrima Saxena</h3>
+        <p>Frontend Developer</p>
+      </div>
+
+      <div class="card member-card">
+        <div class="avatar">2</div>
+        <h3>Muskan Gupta</h3>
+        <p>Backend Developer</p>
+      </div>
+
+      <div class="card member-card">
+        <div class="avatar">3</div>
+        <h3>Maneesha kumari</h3>
+        <p>Backend Developer</p>
+      </div>
+
+      <div class="card member-card">
+        <div class="avatar">4</div>
+        <h3>Ashna kumari</h3>
+        <p>UI/UX Designer</p>
+      </div>
+
+      <div class="card member-card">
+        <div class="avatar">5</div>
+        <h3>Tanishka agarwal</h3>
+        <p>Testing and Research</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div>
+      <strong>TruthLens</strong> — AI-Based Fake Identity &amp; Document Screening System (SIH26188)
+    </div>
+    <div class="footer-links">
+      <a href="#home">Home</a>
+      <a href="#solutions">Solutions</a>
+      <a href="/presentation">Slide Deck</a>
+      <a href="/docs" target="_blank">API Docs</a>
+    </div>
+  </footer>
+
+  <!-- Login Modal -->
+  <div class="modal" id="loginModal">
+    <div class="form-box">
+      <button type="button" class="close-btn" id="closeLogin" aria-label="Close modal">&times;</button>
+
+      <h2>Log In</h2>
+      <p>Welcome back to TruthLens Border Screening System.</p>
+
+      <div class="message" id="loginMessage"></div>
+
+      <form id="loginForm" autocomplete="on">
+        <label for="loginEmail">Email Address</label>
+        <input type="email" id="loginEmail" placeholder="officer@truthlens.gov.in" required autocomplete="username">
+
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+
+        <button type="submit" class="primary-btn form-submit" id="btnLoginSubmit">Log In</button>
+      </form>
+
+      <!-- Demo Credentials Helper -->
+      <div class="demo-creds-box">
+        <div class="demo-creds-title">
+          <span>⚡ Quick Demo Credentials</span>
+        </div>
+        <div class="demo-creds-list">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>Officer: officer@truthlens.gov.in</span>
+            <button type="button" class="chip-fill-btn" onclick="fillDemoCredentials('officer@truthlens.gov.in', 'TruthLens@2025')">Auto Fill</button>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+            <span>Supervisor: admin@truthlens.gov.in</span>
+            <button type="button" class="chip-fill-btn" onclick="fillDemoCredentials('admin@truthlens.gov.in', 'Admin@123')">Auto Fill</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="form-link">
+        New to TruthLens?
+        <a href="#" id="switchToSignup">Create an account</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Sign Up Modal -->
+  <div class="modal" id="signupModal">
+    <div class="form-box">
+      <button type="button" class="close-btn" id="closeSignup" aria-label="Close modal">&times;</button>
+
+      <h2>Sign Up</h2>
+      <p>Create your TruthLens officer / user account.</p>
+
+      <div class="message" id="signupMessage"></div>
+
+      <form id="signupForm" autocomplete="on">
+        <label for="fullName">Full Name</label>
+        <input type="text" id="fullName" placeholder="Enter your full name" required autocomplete="name">
+
+        <label for="signupEmail">Email Address</label>
+        <input type="email" id="signupEmail" placeholder="Enter your email" required autocomplete="email">
+
+        <label for="phone">Phone Number</label>
+        <input type="tel" id="phone" placeholder="+91 98765 43210" autocomplete="tel">
+
+        <label for="gender">Gender</label>
+        <select id="gender">
+          <option value="">Select your gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+
+        <label for="signupPassword">Create Password</label>
+        <input type="password" id="signupPassword" placeholder="Minimum 6 characters" required autocomplete="new-password">
+
+        <label for="confirmPassword">Confirm Password</label>
+        <input type="password" id="confirmPassword" placeholder="Confirm your password" required autocomplete="new-password">
+
+        <button type="submit" class="primary-btn form-submit" id="btnSignupSubmit">Sign Up</button>
+      </form>
+
+      <p class="form-link">
+        Already have an account?
+        <a href="#" id="switchToLogin">Log In</a>
+      </p>
+    </div>
+  </div>
+
+  <script src="/static/js/auth.js?v=3.0"></script>
+</body>
+</html>

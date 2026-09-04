@@ -19,9 +19,9 @@ import os
 import base64
 from pathlib import Path
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from PIL import Image, ImageOps
@@ -37,7 +37,13 @@ from app.database.db_manager import (
     get_history,
     get_screening_by_id,
     get_all_mock_watchlists,
-    get_dashboard_statistics
+    get_dashboard_statistics,
+    register_user,
+    authenticate_user,
+    create_user_session,
+    validate_user_session,
+    delete_user_session,
+    get_user_by_id
 )
 
 app = FastAPI(
@@ -57,6 +63,17 @@ app.add_middleware(
 
 # Mount static directory
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+def _extract_session_token(request: Request) -> Optional[str]:
+    """Extracts session token from cookie, Authorization header, or query param."""
+    token = request.cookies.get("session_token")
+    if token:
+        return token
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return request.query_params.get("token")
 
 
 def _decode_image_file(upload: UploadFile) -> Image.Image:
@@ -84,8 +101,39 @@ def _decode_base64_image(b64_str: str) -> Image.Image:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_index():
-    """Serves the main TruthLens Border Control Dashboard UI."""
+async def serve_landing(request: Request):
+    """Serves the main TruthLens landing page with integrated login & registration."""
+    landing_path = STATIC_DIR / "landing.html"
+    if not landing_path.exists():
+        index_path = STATIC_DIR / "index.html"
+        with open(index_path, "r", encoding="utf-8") as f:
+            return f.read()
+    with open(landing_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def serve_login(request: Request):
+    """Serves the login page. Redirects to /dashboard if already authenticated."""
+    token = _extract_session_token(request)
+    if token and validate_user_session(token):
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    landing_path = STATIC_DIR / "landing.html"
+    if not landing_path.exists():
+        raise HTTPException(status_code=404, detail="Landing HTML not found")
+    with open(landing_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard(request: Request):
+    """Serves the protected TruthLens Border Control Dashboard UI."""
+    token = _extract_session_token(request)
+    user = validate_user_session(token) if token else None
+    if not user:
+        return RedirectResponse(url="/login?redirect=/dashboard", status_code=303)
+
     index_path = STATIC_DIR / "index.html"
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="Index HTML not found")
@@ -101,6 +149,141 @@ async def serve_presentation():
         raise HTTPException(status_code=404, detail="Presentation HTML not found")
     with open(pres_path, "r", encoding="utf-8") as f:
         return f.read()
+
+
+# ============================================================================
+# AUTHENTICATION API ENDPOINTS
+# ============================================================================
+
+@app.post("/api/auth/register")
+async def api_register(request: Request):
+    """Registers a new user and creates an active session."""
+    data = {}
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+    else:
+        form = await request.form()
+        data = dict(form)
+
+    full_name = str(data.get("full_name", "")).strip()
+    email = str(data.get("email", "")).strip()
+    password = str(data.get("password", "")).strip()
+    confirm_password = str(data.get("confirm_password", "")).strip()
+    phone = str(data.get("phone", "")).strip()
+    gender = str(data.get("gender", "")).strip()
+
+    if not full_name or not email or not password:
+        raise HTTPException(status_code=400, detail="Full name, email, and password are required")
+
+    if confirm_password and password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long")
+
+    try:
+        user = register_user(
+            full_name=full_name,
+            email=email,
+            password=password,
+            phone=phone,
+            gender=gender,
+            role="OFFICER"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    session_info = create_user_session(user["user_id"], user["email"])
+    token = session_info["session_token"]
+
+    res = JSONResponse(content={
+        "success": True,
+        "message": "Account created successfully",
+        "token": token,
+        "user": user,
+        "redirect_url": "/dashboard"
+    })
+    res.set_cookie(
+        key="session_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=7 * 24 * 3600,
+        path="/"
+    )
+    return res
+
+
+@app.post("/api/auth/login")
+async def api_login(request: Request):
+    """Authenticates user credentials and starts a secure session."""
+    data = {}
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+    else:
+        form = await request.form()
+        data = dict(form)
+
+    email = str(data.get("email", "")).strip()
+    password = str(data.get("password", "")).strip()
+
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+
+    user = authenticate_user(email, password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    session_info = create_user_session(user["user_id"], user["email"])
+    token = session_info["session_token"]
+
+    res = JSONResponse(content={
+        "success": True,
+        "message": "Login successful",
+        "token": token,
+        "user": user,
+        "redirect_url": "/dashboard"
+    })
+    res.set_cookie(
+        key="session_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=7 * 24 * 3600,
+        path="/"
+    )
+    return res
+
+
+@app.post("/api/auth/logout")
+async def api_logout(request: Request):
+    """Terminates the active session and clears auth cookies."""
+    token = _extract_session_token(request)
+    if token:
+        delete_user_session(token)
+    res = JSONResponse(content={"success": True, "message": "Logged out successfully", "redirect_url": "/login"})
+    res.delete_cookie(key="session_token", path="/")
+    return res
+
+
+@app.get("/api/auth/me")
+async def api_current_user(request: Request):
+    """Returns the currently authenticated officer's profile."""
+    token = _extract_session_token(request)
+    if not token:
+        return {"authenticated": False, "user": None}
+    user = validate_user_session(token)
+    if not user:
+        return {"authenticated": False, "user": None}
+    return {"authenticated": True, "user": user}
 
 
 

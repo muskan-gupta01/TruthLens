@@ -1137,9 +1137,52 @@
   }
 
   // =========================================================================
+  // OFFICER SESSION & AUTHENTICATION HANDLING
+  // =========================================================================
+  async function checkSessionAndSetupAuth() {
+    try {
+      const res = await fetch('/api/auth/me');
+      const data = await res.json();
+
+      if (!data.authenticated || !data.user) {
+        // Redirect to login with current path
+        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        return;
+      }
+
+      // Populate masthead session indicator
+      const nameEl = document.getElementById('officer-name-display');
+      const roleEl = document.getElementById('officer-role-display');
+      if (nameEl && data.user.full_name) {
+        nameEl.textContent = data.user.full_name;
+      }
+      if (roleEl && data.user.role) {
+        roleEl.textContent = data.user.role;
+      }
+    } catch (err) {
+      console.warn('Session verification error:', err);
+    }
+  }
+
+  // Logout Button
+  const btnDashboardLogout = document.getElementById('btn-dashboard-logout');
+  if (btnDashboardLogout) {
+    btnDashboardLogout.addEventListener('click', async function () {
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      localStorage.removeItem('truthlens_token');
+      localStorage.removeItem('truthlens_user');
+      window.location.href = '/login';
+    });
+  }
+
+  // =========================================================================
   // INITIALIZATION ON LOAD
   // =========================================================================
+  checkSessionAndSetupAuth();
   loadDashboardStats();
   console.log('TruthLens Border Screening Dashboard Initialized.');
 
 })();
+
