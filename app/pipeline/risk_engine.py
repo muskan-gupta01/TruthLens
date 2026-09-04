@@ -216,15 +216,42 @@ def compute_risk_assessment(
         })
 
     # =========================================================================
-    # 6. OCR & MISSING MANDATORY FIELDS
+    # 6. OCR, MISSING MANDATORY FIELDS & DOCUMENT MISMATCH / FRAUD
     # =========================================================================
     fields = ocr_report.get("fields", {})
     name = fields.get("full_name") or fields.get("name")
     doc_id = fields.get("passport_number") or fields.get("visa_number") or fields.get("id_number")
     doc_type = ocr_report.get("doc_type", "UNKNOWN")
+    claimed_type = ocr_report.get("claimed_type") or doc_type
+    is_mismatch = ocr_report.get("is_claimed_mismatch", False)
+    is_non_identity = ocr_report.get("is_non_identity", False) or (doc_type in ["BUSINESS_CARD", "NON_IDENTITY_DOCUMENT"])
 
-    if doc_type == "UNKNOWN":
-        pts = 45
+    if is_mismatch or is_non_identity:
+        pts = 90
+        raw_score += pts
+        factors.append({
+            "category": "DOCUMENT_TYPE_FRAUD",
+            "points": pts,
+            "severity": "CRITICAL",
+            "name": f"Document Impersonation: {claimed_type} vs {doc_type.replace('_', ' ').title()}",
+            "description": (
+                f"Severe fraud & identity deception attempt: Intake registered as official '{claimed_type}', "
+                f"but multi-modal analysis confirmed a non-identity commercial document ({doc_type.replace('_', ' ').title()}) "
+                f"lacking all statutory government credentials, seals, and checksums."
+            )
+        })
+        if not doc_id:
+            pts_id = 25
+            raw_score += pts_id
+            factors.append({
+                "category": "MISSING_MANDATORY_ID",
+                "points": pts_id,
+                "severity": "CRITICAL",
+                "name": f"Missing Statutory {claimed_type} Identifier",
+                "description": f"No valid {claimed_type} number detected. Document completely invalid for identity screening."
+            })
+    elif doc_type == "UNKNOWN":
+        pts = 60
         raw_score += pts
         factors.append({
             "category": "UNRECOGNIZED_DOCUMENT",
@@ -235,7 +262,7 @@ def compute_risk_assessment(
         })
     elif not name and not doc_id:
         # Document header was identified (e.g. PAN card / Aadhaar), but text contrast was poor
-        pts = 18
+        pts = 25
         raw_score += pts
         factors.append({
             "category": "BLURRY_CAMERA_CAPTURE",
@@ -245,7 +272,7 @@ def compute_risk_assessment(
             "description": f"Document identified as {doc_type}, but optical resolution was too low to read ID numbers clearly. Retake photo under direct light."
         })
     elif not name or not doc_id:
-        pts = 10
+        pts = 15
         raw_score += pts
         factors.append({
             "category": "MISSING_FIELDS",
@@ -290,7 +317,16 @@ def compute_risk_assessment(
 
     # Risk level classification
     is_unrecognized = (doc_type == "UNKNOWN")
-    if is_unrecognized:
+    if is_mismatch or is_non_identity:
+        final_score = max(final_score, 95)  # Guaranteed 95 - 100 critical score for fraud / non-identity
+        risk_level = "CRITICAL"
+        verdict = VERDICT_HIGH_RISK
+        officer_rec = (
+            f"CRITICAL SECURITY REJECTION: Immediate denial of entry/intake. Traveler submitted a non-identity commercial "
+            f"document ({doc_type.replace('_', ' ').title()}) represented as an official {claimed_type}. "
+            "Potential deliberate fraud or document deception. Escalate to supervisory border authority."
+        )
+    elif is_unrecognized:
         risk_level = "HIGH" if final_score >= 60 else "MEDIUM"
         verdict = VERDICT_HIGH_RISK if final_score >= 60 else "NEEDS MANUAL REVIEW"
         officer_rec = "UNVERIFIED INTAKE: Document type unrecognized or illegible. Mandatory identity fields missing. Officer must conduct manual physical inspection and re-scan under proper lighting."

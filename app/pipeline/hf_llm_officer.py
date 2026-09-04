@@ -113,21 +113,44 @@ def _synthesize_local_intelligence(screening_data: Dict[str, Any]) -> Dict[str, 
         )
     else:
         status_category = "HIGH RISK / SECURITY BREACH"
-        exec_summary = (
-            f"CRITICAL FRAUD ALERT: Presented {doc_type} credential (ID: {doc_id}) failed core cryptographic and forensic security checks (Risk Index: {score}/100). "
-            f"High likelihood of forged document, digital portrait splice, or impersonation attempt."
-        )
-        forensic_reasoning = (
-            f"Multiple catastrophic failure modes detected. ELA Tamper Index is {tamper_score}% (Photo Splice: {photo_spliced}). "
-            f"1:1 Biometric verification resulted in {face_verdict} ({face_match}% match), indicating presented traveler is not the legitimate document owner."
-        )
-        legal_basis = (
-            "Cognizable offense under Indian Penal Code (IPC) Sections 463 (Forgery), 468 (Forgery for purpose of cheating), "
-            "and 471 (Using as genuine a forged document), as well as Section 12 of the Passports Act, 1967. Corresponds to Sections 336 & 338 of the Bhartiya Nyaya Sanhita (BNS), 2023."
-        )
-        officer_action = (
-            "DETENTION & ESCALATION PROTOCOL: Immediately withhold traveler credentials. Notify Bureau of Immigration (BOI) shift supervisor and Central Industrial Security Force (CISF) duty officer. Initiate formal fraud chain-of-custody report."
-        )
+        is_type_fraud = any(f.get("category") == "DOCUMENT_TYPE_FRAUD" for f in risk.get("factors", [])) or doc_type in ["BUSINESS_CARD", "NON_IDENTITY_DOCUMENT"]
+
+        if is_type_fraud:
+            exec_summary = (
+                f"CRITICAL IDENTITY DECEPTION ALERT: Intake submitted under official identity guise, but forensic analysis "
+                f"confirmed a non-identity commercial document ({doc_type.replace('_', ' ').title()}) (Risk Index: {score}/100). "
+                f"Total absence of statutory government emblems, UIDAI security features, or valid check digits."
+            )
+            forensic_reasoning = (
+                f"Multi-modal OCR and forensic analysis detected commercial corporate markers (designations, contact points) "
+                f"rather than official government travel credentials. ELA compression matrix confirmed commercial paper. "
+                f"Document is 100% inadmissible as an official identity credential."
+            )
+            legal_basis = (
+                "Severe cognizable violation under Indian Penal Code (IPC) Section 416 & 419 (Cheating by personation), "
+                "Section 468 (Forgery for purpose of cheating), and Section 471 (Using fraudulent media as genuine). "
+                "Corresponds to Sections 319 & 338 of the Bharatiya Nyaya Sanhita (BNS), 2023."
+            )
+            officer_action = (
+                "IMMEDIATE INTAKE DENIAL & EVIDENCE DETAINMENT: Outright rejection of credentials. "
+                "Withhold submitted media as physical evidence of attempted identity deception. Dispatch immediate escalation report to CISF/BOI supervisory authority."
+            )
+        else:
+            exec_summary = (
+                f"CRITICAL FRAUD ALERT: Presented {doc_type} credential (ID: {doc_id}) failed core cryptographic and forensic security checks (Risk Index: {score}/100). "
+                f"High likelihood of forged document, digital portrait splice, or impersonation attempt."
+            )
+            forensic_reasoning = (
+                f"Multiple catastrophic failure modes detected. ELA Tamper Index is {tamper_score}% (Photo Splice: {photo_spliced}). "
+                f"1:1 Biometric verification resulted in {face_verdict} ({face_match}% match), indicating presented traveler is not the legitimate document owner."
+            )
+            legal_basis = (
+                "Cognizable offense under Indian Penal Code (IPC) Sections 463 (Forgery), 468 (Forgery for purpose of cheating), "
+                "and 471 (Using as genuine a forged document), as well as Section 12 of the Passports Act, 1967. Corresponds to Sections 336 & 338 of the Bhartiya Nyaya Sanhita (BNS), 2023."
+            )
+            officer_action = (
+                "DETENTION & ESCALATION PROTOCOL: Immediately withhold traveler credentials. Notify Bureau of Immigration (BOI) shift supervisor and Central Industrial Security Force (CISF) duty officer. Initiate formal fraud chain-of-custody report."
+            )
 
     return {
         "model_used": "TRUTHLENS-NEURAL-LEGAL-ENGINE (MHA Specialized Rulebase)",

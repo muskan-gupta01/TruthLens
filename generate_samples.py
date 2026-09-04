@@ -399,6 +399,76 @@ def make_genuine_pan():
     print(f"Generated: {out_path.name}")
 
 
+def make_sample_business_card():
+    """Generates a realistic commercial visiting / business card (Rajesh Malhotra, Nexus Cloud)."""
+    w, h = 850, 500
+    img = Image.new("RGB", (w, h), (250, 252, 255))
+    draw = ImageDraw.Draw(img)
+
+    # Stylish corporate branding bar (top and left accent)
+    draw.rectangle([0, 0, 16, h], fill=(30, 60, 115))
+    draw.rectangle([0, 0, w, 8], fill=(0, 150, 214))
+
+    f_comp = get_font(22, bold=True)
+    f_tag = get_font(12)
+    f_name = get_font(26, bold=True)
+    f_title = get_font(14, bold=True)
+    f_body = get_font(14)
+    f_serv = get_font(12, bold=True)
+
+    # Company Logo & Name
+    draw.ellipse([45, 35, 85, 75], fill=(30, 60, 115))
+    draw.text((58, 42), "N", fill=(255, 255, 255), font=get_font(24, bold=True))
+    draw.text((100, 38), "NEXUS CLOUD TECHNOLOGIES PVT. LTD.", fill=(20, 35, 65), font=f_comp)
+    draw.text((100, 68), "Enterprise IT Infrastructure & Cloud Computing", fill=(100, 115, 135), font=f_tag)
+
+    # Divider line
+    draw.line([(45, 105), (w - 45, 105)], fill=(220, 228, 240), width=2)
+
+    # Individual details
+    draw.text((50, 135), "RAJESH MALHOTRA", fill=(15, 25, 45), font=f_name)
+    draw.text((50, 175), "MANAGING DIRECTOR & FOUNDER", fill=(0, 130, 195), font=f_title)
+
+    # Contact details with labels
+    contacts = [
+        ("Mobile:", "+91 98765 43210"),
+        ("Email:", "rajesh.malhotra@nexuscloud.in"),
+        ("Website:", "www.nexuscloudtechnologies.com"),
+        ("Office:", "Plot 42, Cyber City, Sector 29, Gurugram, Haryana - 122002")
+    ]
+    y_pos = 225
+    for lbl, val in contacts:
+        draw.text((50, y_pos), lbl, fill=(110, 125, 145), font=get_font(13, bold=True))
+        draw.text((130, y_pos), val, fill=(30, 45, 70), font=f_body)
+        y_pos += 32
+
+    # Bottom services strip
+    draw.rectangle([0, h - 55, w, h], fill=(238, 244, 252))
+    draw.text((50, h - 38), "SERVICES: Cloud Migration  •  AI & Automation  •  Cybersecurity Advisory", fill=(45, 75, 120), font=f_serv)
+
+    # Commercial vCard QR Code (Top Right)
+    vcard_payload = (
+        "BEGIN:VCARD\n"
+        "VERSION:3.0\n"
+        "FN:Rajesh Malhotra\n"
+        "TITLE:Managing Director & Founder\n"
+        "ORG:Nexus Cloud Technologies Pvt. Ltd.\n"
+        "TEL:+919876543210\n"
+        "EMAIL:rajesh.malhotra@nexuscloud.in\n"
+        "URL:https://www.nexuscloudtechnologies.com\n"
+        "END:VCARD"
+    )
+    qr_img = generate_qr_image(vcard_payload, 150)
+    img.paste(qr_img, (w - 195, 135))
+
+    # Border frame
+    draw.rectangle([0, 0, w - 1, h - 1], outline=(190, 205, 225), width=2)
+
+    out_path = SAMPLE_DOCS_DIR / "sample_commercial_business_card.jpg"
+    img.save(out_path, quality=95)
+    print(f"Generated: {out_path.name}")
+
+
 def generate_all_samples():
     """Generates all demonstration assets."""
     SAMPLE_DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -412,6 +482,7 @@ def generate_all_samples():
     make_expired_visa()
     make_genuine_aadhaar()
     make_genuine_pan()
+    make_sample_business_card()
     print("=" * 60)
     print("All demo assets successfully generated in:", SAMPLE_DOCS_DIR)
     print("=" * 60)
@@ -419,3 +490,4 @@ def generate_all_samples():
 
 if __name__ == "__main__":
     generate_all_samples()
+

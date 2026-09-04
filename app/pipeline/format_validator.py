@@ -23,7 +23,10 @@ from app.config import (
     DOC_TYPE_DRIVING_LICENSE,
     DOC_TYPE_PERMIT,
     DOC_TYPE_AADHAAR,
-    DOC_TYPE_PAN
+    DOC_TYPE_PAN,
+    DOC_TYPE_BUSINESS_CARD,
+    DOC_TYPE_NON_IDENTITY,
+    DOC_TYPE_UNKNOWN
 )
 
 # ==============================================================================
@@ -267,7 +270,8 @@ def validate_aadhaar_number(aadhaar_str: Optional[str]) -> Dict[str, Any]:
 def validate_document_rules(
     doc_type: str,
     fields: Dict[str, Any],
-    mrz_data: Optional[Dict[str, Any]] = None
+    mrz_data: Optional[Dict[str, Any]] = None,
+    ocr_data: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Executes full rule-based validation:
@@ -281,6 +285,11 @@ def validate_document_rules(
     total_failures = 0
     total_warnings = 0
 
+    ocr_data = ocr_data or {}
+    is_mismatch = ocr_data.get("is_claimed_mismatch", False)
+    is_non_id = ocr_data.get("is_non_identity", False) or (doc_type in [DOC_TYPE_BUSINESS_CARD, DOC_TYPE_NON_IDENTITY])
+    claimed_type = ocr_data.get("claimed_type") or doc_type
+
     doc_num = (
         fields.get("passport_number") or
         fields.get("visa_number") or
@@ -290,14 +299,38 @@ def validate_document_rules(
     )
     person_name = fields.get("full_name") or fields.get("name") or fields.get("traveler_name")
 
+    # 0. Non-Identity Document / Claimed Document Type Mismatch Check
+    if is_mismatch or is_non_id:
+        checklist.append({
+            "check": "Document Type Conformity & Physical Authenticity",
+            "status": "FAIL",
+            "badge": "✕ Invalid",
+            "detail": (
+                f"CRITICAL FRAUD / TYPE MISMATCH: User submitted intake under category '{claimed_type}', "
+                f"but physical optical examination identified a non-identity commercial document "
+                f"({doc_type.replace('_', ' ').title()}). Lacks all statutory government identity credentials."
+            )
+        })
+        total_failures += 3
+
+        checklist.append({
+            "check": "Statutory Government Emblems & Security Features",
+            "status": "FAIL",
+            "badge": "✕ Invalid",
+            "detail": f"FAILED: Document lacks official government security features (National Emblem, UIDAI hologram, official typography) required for {claimed_type}."
+        })
+        total_failures += 2
+
     # 1. Mandatory Name Check
     if person_name and len(person_name.strip()) >= 3:
         checklist.append({
             "check": "Full Name Presence",
-            "status": "PASS",
-            "badge": "✓ Valid",
-            "detail": f"Subject name recorded: '{person_name}'."
+            "status": "PASS" if not (is_mismatch or is_non_id) else "WARN",
+            "badge": "✓ Valid" if not (is_mismatch or is_non_id) else "⚠ Commercial Name",
+            "detail": f"Subject name recorded: '{person_name}'." if not (is_mismatch or is_non_id) else f"Commercial contact name extracted ('{person_name}'), but lacks institutional citizenship endorsement."
         })
+        if is_mismatch or is_non_id:
+            total_warnings += 1
     else:
         checklist.append({
             "check": "Full Name Presence",
@@ -308,7 +341,41 @@ def validate_document_rules(
         total_warnings += 1
 
     # 2. Document Number & Checksum Check
-    if doc_type == DOC_TYPE_PASSPORT:
+    if is_mismatch or is_non_id or doc_type in [DOC_TYPE_BUSINESS_CARD, DOC_TYPE_NON_IDENTITY]:
+        if claimed_type == DOC_TYPE_AADHAAR:
+            checklist.append({
+                "check": "Aadhaar Verhoeff Checksum",
+                "status": "FAIL",
+                "badge": "✕ Invalid",
+                "detail": "FAILED: Missing official 12-digit UIDAI sequence. Verhoeff dihedral D5 checksum cannot be computed on non-identity media."
+            })
+            total_failures += 2
+        elif claimed_type == DOC_TYPE_PAN:
+            checklist.append({
+                "check": "PAN Syntax & Entity Code",
+                "status": "FAIL",
+                "badge": "✕ Invalid",
+                "detail": "FAILED: No 10-character PAN syntax found. Commercial document lacks Income Tax Department structure."
+            })
+            total_failures += 2
+        elif claimed_type == DOC_TYPE_PASSPORT:
+            checklist.append({
+                "check": "Passport Number & ICAO Checksum",
+                "status": "FAIL",
+                "badge": "✕ Invalid",
+                "detail": "FAILED: Missing ICAO Doc 9303 MRZ lines and passport serial number."
+            })
+            total_failures += 2
+        else:
+            checklist.append({
+                "check": "Statutory Document Number & Checksum",
+                "status": "FAIL",
+                "badge": "✕ Invalid",
+                "detail": f"FAILED: No statutory {claimed_type} identifier detected on non-identity media."
+            })
+            total_failures += 2
+
+    elif doc_type == DOC_TYPE_PASSPORT:
         res_num = validate_passport_number(doc_num, mrz_data)
         checklist.append({
             "check": "Passport Number & ICAO Checksum",
@@ -363,33 +430,51 @@ def validate_document_rules(
             total_failures += 1
 
     # 3. DOB & Passenger Age
-    dob_val = fields.get("dob")
-    dob_res = check_date_validity(dob_val)
-    checklist.append({
-        "check": "Date of Birth & Age Sanity",
-        "status": dob_res["status"],
-        "badge": dob_res["label"],
-        "detail": dob_res["message"]
-    })
-    if dob_res["status"] == "FAIL":
+    if is_mismatch or is_non_id:
+        checklist.append({
+            "check": "Date of Birth & Age Sanity",
+            "status": "FAIL",
+            "badge": "✕ Invalid",
+            "detail": f"FAILED: No statutory Date of Birth recorded. Inadmissible for {claimed_type} identity intake."
+        })
         total_failures += 1
+    else:
+        dob_val = fields.get("dob")
+        dob_res = check_date_validity(dob_val)
+        checklist.append({
+            "check": "Date of Birth & Age Sanity",
+            "status": dob_res["status"],
+            "badge": dob_res["label"],
+            "detail": dob_res["message"]
+        })
+        if dob_res["status"] == "FAIL":
+            total_failures += 1
 
     # 4. Expiry Date & Border 6-Month Rule
-    expiry_val = fields.get("expiry_date") or fields.get("valid_until")
-    exp_res = check_expiry_validity(expiry_val, doc_type)
-    checklist.append({
-        "check": "Document Expiry & Validity Window",
-        "status": exp_res["status"],
-        "badge": exp_res["label"],
-        "detail": exp_res["message"]
-    })
-    if exp_res["status"] == "FAIL":
+    if is_mismatch or is_non_id:
+        checklist.append({
+            "check": "Document Expiry & Validity Window",
+            "status": "FAIL",
+            "badge": "✕ Invalid",
+            "detail": "FAILED: Commercial non-identity media cannot be verified for statutory immigration validity."
+        })
         total_failures += 1
-    elif exp_res["status"] == "WARN":
-        total_warnings += 1
+    else:
+        expiry_val = fields.get("expiry_date") or fields.get("valid_until")
+        exp_res = check_expiry_validity(expiry_val, doc_type)
+        checklist.append({
+            "check": "Document Expiry & Validity Window",
+            "status": exp_res["status"],
+            "badge": exp_res["label"],
+            "detail": exp_res["message"]
+        })
+        if exp_res["status"] == "FAIL":
+            total_failures += 1
+        elif exp_res["status"] == "WARN":
+            total_warnings += 1
 
     # 5. Visa Stay Duration Rule
-    if doc_type == DOC_TYPE_VISA:
+    if doc_type == DOC_TYPE_VISA and not (is_mismatch or is_non_id):
         stay = fields.get("stay_duration", "90 DAYS")
         checklist.append({
             "check": "Visa Stay Duration Limit",

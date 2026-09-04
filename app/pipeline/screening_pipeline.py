@@ -36,6 +36,8 @@ from app.config import (
     DOC_TYPE_PERMIT,
     DOC_TYPE_AADHAAR,
     DOC_TYPE_PAN,
+    DOC_TYPE_BUSINESS_CARD,
+    DOC_TYPE_NON_IDENTITY,
     DOC_TYPE_UNKNOWN
 )
 
@@ -110,11 +112,15 @@ def run_truthlens_screening(
         if "uidai" in str(qr_fields.get("format", "")).lower():
             doc_type = DOC_TYPE_AADHAAR
             ocr_result["doc_type"] = DOC_TYPE_AADHAAR
+            ocr_result["is_claimed_mismatch"] = False
+            ocr_result["is_non_identity"] = False
             # Fill missing OCR fields only if not present on document
             if not fields.get("id_number") and qr_fields.get("id_number"):
                 fields["id_number"] = qr_fields.get("id_number")
             if not fields.get("dob") and qr_fields.get("dob"):
                 fields["dob"] = qr_fields.get("dob")
+            if not fields.get("name") and qr_fields.get("name"):
+                fields["name"] = qr_fields.get("name")
 
     # Cryptographic cross-verification: Printed Document Text vs Encrypted QR Payload
     cross_result = cross_verify_documents(ocr_result, qr_result)
@@ -141,7 +147,7 @@ def run_truthlens_screening(
     # =========================================================================
     # STEP 6: DOCUMENT RULES & MOCK DATABASE VALIDATION
     # =========================================================================
-    validation_result = validate_document_rules(doc_type, fields, mrz_data=mrz_data)
+    validation_result = validate_document_rules(doc_type, fields, mrz_data=mrz_data, ocr_data=ocr_result)
 
     # =========================================================================
     # STEP 7: DYNAMIC RISK ASSESSMENT ENGINE & FINAL VERDICT
@@ -193,8 +199,13 @@ def run_truthlens_screening(
 
     name_val = fields.get("full_name") or fields.get("name")
     num_val = fields.get("passport_number") or fields.get("visa_number") or fields.get("id_number")
+    claimed_type = ocr_result.get("claimed_type") or doc_type
+    is_mismatch = ocr_result.get("is_claimed_mismatch", False)
+    is_non_identity = ocr_result.get("is_non_identity", False) or (doc_type in [DOC_TYPE_BUSINESS_CARD, DOC_TYPE_NON_IDENTITY])
 
-    if doc_type == DOC_TYPE_UNKNOWN or (not name_val and not num_val):
+    if is_mismatch or is_non_identity:
+        summary = f"CRITICAL FRAUD REJECTION: Presented as '{claimed_type}' but confirmed as a non-identity commercial document ({doc_type.replace('_', ' ').title()}). Lacks all statutory government credentials (Risk Score: {risk_score}/100)."
+    elif doc_type == DOC_TYPE_UNKNOWN or (not name_val and not num_val):
         summary = f"INCOMPLETE SCREENING: Document could not be recognized as a valid institutional identity format (Risk Score: {risk_score}/100)."
     elif risk_level == "LOW":
         summary = f"Document verified authentic across optical, mathematical, and forensic checks (Risk Score: {risk_score}/100)."
@@ -208,19 +219,25 @@ def run_truthlens_screening(
     is_critical = (risk_level in ["CRITICAL", "HIGH"])
 
     # 1. Format & Expiry
-    format_pass = validation_result.get("valid", False) and not validation_result.get("expired", False)
-    format_status = "PASS" if format_pass else ("FAIL" if validation_result.get("expired") else "WARN")
-    if validation_result.get("expired"):
+    if is_mismatch or is_non_identity:
+        format_status = "FAIL"
+        format_detail = f"FRAUD / NON-IDENTITY: Uploaded image is a commercial {doc_type.replace('_', ' ').title()}, not an official government credential."
+    elif validation_result.get("expired"):
+        format_status = "FAIL"
         format_detail = "EXPIRED: Document has surpassed its valid transit date."
-    elif doc_type == DOC_TYPE_UNKNOWN:
+    elif doc_type in [DOC_TYPE_UNKNOWN, DOC_TYPE_NON_IDENTITY]:
+        format_status = "FAIL"
         format_detail = "UNRECOGNIZED: Document structure does not match institutional formats."
     else:
+        format_pass = validation_result.get("valid", False) and not validation_result.get("expired", False)
+        format_status = "PASS" if format_pass else "WARN"
         format_detail = f"VALID: Compliant {doc_type} format with active validity period."
 
     # 2. Checksum (MRZ / Verhoeff / PAN)
-    checksum_status = "PASS"
-    checksum_detail = "Verified: Mathematical check digits valid."
-    if doc_type == DOC_TYPE_PASSPORT:
+    if is_mismatch or is_non_identity:
+        checksum_status = "FAIL"
+        checksum_detail = f"FAILED: No statutory {claimed_type} check digits or Verhoeff sequence present on non-identity media."
+    elif doc_type == DOC_TYPE_PASSPORT:
         if mrz_data and mrz_data.get("checksums", {}).get("all_passed"):
             checksum_status = "PASS"
             checksum_detail = "ICAO 9303: All 7-3-1 check digits mathematically verified."
@@ -276,7 +293,11 @@ def run_truthlens_screening(
         watchlist_detail = "Clear: Zero records found in simulated Interpol/Border watchlists."
 
     # Simple verdict badge and headline
-    if is_genuine:
+    if is_mismatch or is_non_identity:
+        simple_badge = "REJECTED / FAKE DETECTED"
+        simple_color = "red"
+        simple_headline = f"Claimed {claimed_type} Mismatch • Non-Identity Document"
+    elif is_genuine:
         simple_badge = "VERIFIED AUTHENTIC"
         simple_color = "green"
         simple_headline = "Document Authentic • Passenger Cleared"
