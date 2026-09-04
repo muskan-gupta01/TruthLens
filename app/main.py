@@ -33,7 +33,6 @@ from app.config import (
     TESSERACT_PATH
 )
 from app.pipeline.screening_pipeline import run_truthlens_screening
-from app.pipeline.hf_llm_officer import generate_llm_officer_briefing
 from app.database.db_manager import (
     get_history,
     get_screening_by_id,
@@ -338,9 +337,3 @@ async def get_mock_database_endpoint():
         "records": records
     }
 
-
-@app.post("/api/llm/briefing")
-async def get_llm_briefing_endpoint(data: Dict[str, Any]):
-    """Generates an on-demand Hugging Face AI Officer Intelligence Briefing."""
-    briefing = generate_llm_officer_briefing(data)
-    return JSONResponse(content=briefing)
