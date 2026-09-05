@@ -13,20 +13,32 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 
+# Raster image editing software indicative of post-issuance tampering
 SUSPICIOUS_SOFTWARE = [
-    "photoshop", "adobe", "gimp", "canva", "lightroom",
-    "snapseed", "pixlr", "affinity", "paint.net", "corel",
-    "picsart", "facetune", "illustrator", "sketch"
+    "photoshop", "gimp", "canva", "lightroom",
+    "snapseed", "pixlr", "affinity photo", "paint.net", "corel draw", "corel photo",
+    "picsart", "facetune", "illustrator"
+]
+
+# Legitimate document generation, viewing, scanning, and PDF rendering software
+LEGITIMATE_DOCUMENT_ENGINES = [
+    "acrobat", "adobe acrobat", "adobe pdf library", "pdf", "distiller",
+    "ghostscript", "skia", "quartz", "scanner", "epson", "canon", "hp",
+    "brother", "camscanner", "windows photo", "preview"
 ]
 
 
 def analyze_image_metadata(img: Image.Image) -> Dict[str, Any]:
     """
     Performs forensic metadata inspection on PIL Image.
-    Returns audit findings, editing software traces, and risk score.
+    Distinguishes:
+      - Actual raster editing software fingerprints (Photoshop, GIMP, Canva)
+      - Legitimate document generation & PDF export engines (Adobe Acrobat, PDF Library)
+      - Standard missing EXIF metadata (typical of scans, web downloads, or screenshots)
     """
     findings: List[Dict[str, str]] = []
     software_traces = []
+    legit_software_found = []
     has_exif = False
     hardware_present = False
     timestamp_discrepancy = False
@@ -49,7 +61,7 @@ def analyze_image_metadata(img: Image.Image) -> Dict[str, Any]:
         if isinstance(val, str):
             exif_data[f"info_{key}"] = val
 
-    # 1. Scan for Image Editing Software
+    # 1. Scan for Image Editing Software vs Legitimate PDF Engines
     software_tag = exif_data.get("Software") or exif_data.get("info_Software") or ""
     artist_tag = exif_data.get("Artist") or ""
     history_tag = exif_data.get("ImageHistory") or ""
@@ -57,15 +69,26 @@ def analyze_image_metadata(img: Image.Image) -> Dict[str, Any]:
 
     full_meta_str = f"{software_tag} {artist_tag} {history_tag} {comment_tag}".lower()
 
+    # Check for suspicious raster image editing signatures
     for sw in SUSPICIOUS_SOFTWARE:
         if sw in full_meta_str:
             software_traces.append(sw.capitalize())
             software_tamper_flag = True
 
+    # Check for legitimate PDF/document engines if no tampering software was flagged
+    for leg in LEGITIMATE_DOCUMENT_ENGINES:
+        if leg in full_meta_str and not software_tamper_flag:
+            legit_software_found.append(leg.title())
+
     if software_traces:
         findings.append({
-            "severity": "CRITICAL",
-            "text": f"Digital editing software fingerprint detected: {', '.join(set(software_traces))}. High probability of image manipulation."
+            "severity": "HIGH",
+            "text": f"Image editing software signature detected: {', '.join(set(software_traces))}. Forensic review recommended."
+        })
+    elif legit_software_found:
+        findings.append({
+            "severity": "PASS",
+            "text": f"Legitimate document export / PDF engine signature verified: {', '.join(set(legit_software_found))}."
         })
     elif software_tag:
         findings.append({
@@ -73,7 +96,7 @@ def analyze_image_metadata(img: Image.Image) -> Dict[str, Any]:
             "text": f"Software tag recorded: '{software_tag}'."
         })
 
-    # 2. Camera / Scanner Hardware Check
+    # 2. Camera / Scanner Hardware Check (Missing hardware is standard for scans/PDFs)
     make = exif_data.get("Make")
     model = exif_data.get("Model")
     if make or model:
@@ -84,8 +107,8 @@ def analyze_image_metadata(img: Image.Image) -> Dict[str, Any]:
         })
     else:
         findings.append({
-            "severity": "WARN",
-            "text": "No hardware camera/scanner signature found in EXIF (typical of web-saved, stripped, or digitally generated graphics)."
+            "severity": "INFO",
+            "text": "Standard digital document format (no camera EXIF metadata embedded)."
         })
 
     # 3. Timestamp Audit (DateTimeOriginal vs DateTime)
@@ -95,15 +118,15 @@ def analyze_image_metadata(img: Image.Image) -> Dict[str, Any]:
         timestamp_discrepancy = True
         findings.append({
             "severity": "WARN",
-            "text": f"Metadata timestamp mismatch: Original capture ({dt_orig}) differs from last modification ({dt_mod})."
+            "text": f"Metadata timestamp divergence: Capture ({dt_orig}) differs from file modification ({dt_mod})."
         })
 
     # Calculate metadata risk contribution (0 to 100)
     risk_points = 0
     if software_tamper_flag:
-        risk_points += 75
+        risk_points += 25
     elif timestamp_discrepancy:
-        risk_points += 30
+        risk_points += 10
 
     status = "CLEAN"
     if software_tamper_flag:

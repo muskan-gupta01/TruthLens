@@ -46,7 +46,8 @@ def run_truthlens_screening(
     live_image_input = None,
     doc_type_hint: Optional[str] = None,
     doc_number_override: Optional[str] = None,
-    person_name_override: Optional[str] = None
+    person_name_override: Optional[str] = None,
+    claimed_doc_type: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Executes the full end-to-end AI document screening pipeline.
@@ -54,7 +55,7 @@ def run_truthlens_screening(
     Args:
     - doc_image_input: PIL Image or OpenCV numpy array of the document
     - live_image_input: Optional live webcam snapshot or presented person photo
-    - doc_type_hint: Optional manual document type hint ('PASSPORT', 'VISA', etc.)
+    - doc_type_hint / claimed_doc_type: Optional manual document type hint ('PASSPORT', 'VISA', etc.)
     - doc_number_override: Optional user-confirmed identity or document number
     - person_name_override: Optional user-confirmed passenger name
     
@@ -63,6 +64,8 @@ def run_truthlens_screening(
       face crops, checklist, and final decision.
     """
     start_time = time.time()
+    if claimed_doc_type and not doc_type_hint:
+        doc_type_hint = claimed_doc_type
     screening_id = f"TL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -102,9 +105,20 @@ def run_truthlens_screening(
             fields["name"] = clean_name
 
     # =========================================================================
-    # STEP 2: QR CODE DECODE & CRYPTOGRAPHIC CROSS-VERIFICATION
+    # STEP 2: QR CODE DECODE & DATA CROSS-VERIFICATION
     # =========================================================================
     qr_result = detect_and_decode_qr(doc_image_input)
+    qr_bbox = None
+    if qr_result.get("detected") and qr_result.get("bbox"):
+        try:
+            pts = np.array(qr_result["bbox"])
+            if len(pts) >= 4:
+                x_min, y_min = np.min(pts, axis=0)
+                x_max, y_max = np.max(pts, axis=0)
+                qr_bbox = (int(x_min), int(y_min), int(x_max - x_min), int(y_max - y_min))
+        except Exception:
+            qr_bbox = None
+
     if qr_result.get("detected") and qr_result.get("decoded"):
         # If QR contains UIDAI data, sync doc type
         qr_fields = qr_result.get("fields", {})
@@ -121,7 +135,7 @@ def run_truthlens_screening(
             if not fields.get("name") and qr_fields.get("name"):
                 fields["name"] = qr_fields.get("name")
 
-    # Cryptographic cross-verification: Printed Document Text vs Encrypted QR Payload
+    # Data consistency check: Printed Document Text vs Decoded QR Payload
     cross_result = cross_verify_documents(ocr_result, qr_result)
 
     # =========================================================================
@@ -136,7 +150,12 @@ def run_truthlens_screening(
     # =========================================================================
     # STEP 4: DIGITAL IMAGE FORENSICS (ELA, PHOTO SPLICE, STAMP ANALYSIS)
     # =========================================================================
-    forensics_result = run_ela_forensic_analysis(doc_image_input, face_bbox=face_bbox, doc_type=doc_type)
+    forensics_result = run_ela_forensic_analysis(
+        doc_image_input,
+        face_bbox=face_bbox,
+        doc_type=doc_type,
+        qr_bbox=qr_bbox
+    )
 
     # =========================================================================
     # STEP 5: METADATA & EXIF FORENSICS
@@ -203,24 +222,37 @@ def run_truthlens_screening(
     is_non_identity = ocr_result.get("is_non_identity", False) or (doc_type in [DOC_TYPE_BUSINESS_CARD, DOC_TYPE_NON_IDENTITY])
 
     if is_mismatch or is_non_identity:
-        summary = f"CRITICAL FRAUD REJECTION: Presented as '{claimed_type}' but confirmed as a non-identity commercial document ({doc_type.replace('_', ' ').title()}). Lacks all statutory government credentials (Risk Score: {risk_score}/100)."
+        if is_non_identity:
+            summary = f"CRITICAL FRAUD REJECTION: Presented as '{claimed_type}' but confirmed as a non-identity commercial document ({doc_type.replace('_', ' ').title()}). Lacks all statutory government credentials (Risk Score: {risk_score}/100)."
+        else:
+            summary = f"CRITICAL FRAUD REJECTION: Presented as '{claimed_type}' but detected characteristics match '{doc_type.replace('_', ' ').title()}'. Document type conflict (Risk Score: {risk_score}/100)."
     elif doc_type == DOC_TYPE_UNKNOWN or (not name_val and not num_val):
         summary = f"INCOMPLETE SCREENING: Document could not be recognized as a valid institutional identity format (Risk Score: {risk_score}/100)."
     elif risk_level == "LOW":
-        summary = f"Document verified authentic across optical, mathematical, and forensic checks (Risk Score: {risk_score}/100)."
+        if any(f.get("category") == "OCR_CHECKSUM_UNCERTAINTY" for f in risk_report.get("factors", [])):
+            summary = f"Document verified with minor OCR optical uncertainty in checksum sequence (Risk Score: {risk_score}/100)."
+        else:
+            summary = f"Document verified authentic across optical, mathematical, and forensic checks (Risk Score: {risk_score}/100)."
     elif risk_level == "MEDIUM":
-        summary = f"Review recommended: Document flagged with {len(risk_report['factors'])} minor warning(s) (Risk Score: {risk_score}/100)."
+        if any(f.get("category") == "CHECKSUM_FAILURE" for f in risk_report.get("factors", [])):
+            summary = f"REVIEW REQUIRED: Document flagged with mathematical checksum failure (Risk Score: {risk_score}/100)."
+        else:
+            summary = f"Review recommended: Document flagged with {len(risk_report['factors'])} minor warning(s) (Risk Score: {risk_score}/100)."
     else:
         summary = f"HIGH RISK ALERT: Rejected due to {len(risk_report['factors'])} security violation(s) (Risk Score: {risk_score}/100)."
 
     # Build 5 key security checkpoints for instant visual display
     is_genuine = (risk_level == "LOW")
     is_critical = (risk_level in ["CRITICAL", "HIGH"])
+    format_pass = validation_result.get("valid", False) and not validation_result.get("expired", False)
 
     # 1. Format & Expiry
     if is_mismatch or is_non_identity:
         format_status = "FAIL"
-        format_detail = f"FRAUD / NON-IDENTITY: Uploaded image is a commercial {doc_type.replace('_', ' ').title()}, not an official government credential."
+        if is_non_identity:
+            format_detail = f"FRAUD / NON-IDENTITY: Uploaded image is a commercial {doc_type.replace('_', ' ').title()}, not an official government credential."
+        else:
+            format_detail = f"TYPE CONFLICT: Uploaded image detected as {doc_type.replace('_', ' ').title()}, conflicting with claimed {claimed_type}."
     elif validation_result.get("expired"):
         format_status = "FAIL"
         format_detail = "EXPIRED: Document has surpassed its valid transit date."
@@ -228,9 +260,15 @@ def run_truthlens_screening(
         format_status = "FAIL"
         format_detail = "UNRECOGNIZED: Document structure does not match institutional formats."
     else:
-        format_pass = validation_result.get("valid", False) and not validation_result.get("expired", False)
-        format_status = "PASS" if format_pass else "WARN"
-        format_detail = f"VALID: Compliant {doc_type} format with active validity period."
+        if format_pass:
+            format_status = "PASS"
+            format_detail = f"VALID: Compliant {doc_type} format with active validity period."
+        elif validation_result.get("failures_count", 0) > 0:
+            format_status = "FAIL"
+            format_detail = f"COMPLIANCE FAILED: {validation_result.get('failures_count')} format or checksum failure(s) detected."
+        else:
+            format_status = "WARN"
+            format_detail = f"COMPLIANCE NOTICE: {validation_result.get('warnings_count', 0)} regulatory/scanning warning(s)."
 
     # 2. Checksum (MRZ / Verhoeff / PAN)
     if is_mismatch or is_non_identity:
@@ -240,21 +278,39 @@ def run_truthlens_screening(
         if mrz_data and mrz_data.get("checksums", {}).get("all_passed"):
             checksum_status = "PASS"
             checksum_detail = "ICAO 9303: All 7-3-1 check digits mathematically verified."
-        else:
+        elif mrz_data and mrz_data.get("valid_structure"):
             checksum_status = "FAIL"
             checksum_detail = "ICAO 9303 Checksum Mismatch: Optical character corruption or forged number."
+        else:
+            chk = next((c for c in validation_result.get("checklist", []) if any(k in c.get("check", "") for k in ["Passport", "ICAO"])), None)
+            if chk:
+                checksum_status = chk.get("status", "FAIL")
+                checksum_detail = chk.get("detail", "Passport number / MRZ checksum check.")
+            else:
+                checksum_status = "FAIL"
+                checksum_detail = "Passport MRZ / Serial Number not detected."
     elif doc_type == DOC_TYPE_AADHAAR:
-        v_passed = any(c.get("name") == "Verhoeff Checksum Algorithm" and c.get("status") == "PASS" for c in validation_result.get("checklist", []))
-        if v_passed:
-            checksum_status = "PASS"
-            checksum_detail = "UIDAI Verhoeff: Dihedral D5 checksum algorithm valid."
+        aadhaar_check = next(
+            (c for c in validation_result.get("checklist", []) if any(k in c.get("check", "") for k in ["Verhoeff", "Aadhaar"])),
+            None
+        )
+        if aadhaar_check:
+            checksum_status = aadhaar_check.get("status", "FAIL")
+            checksum_detail = aadhaar_check.get("detail", "UIDAI Verhoeff Checksum inspection.")
         else:
             checksum_status = "FAIL"
-            checksum_detail = "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number."
+            checksum_detail = "Aadhaar 12-digit sequence missing or unreadable."
     elif doc_type == DOC_TYPE_PAN:
-        pan_passed = any("PAN" in c.get("name", "") and c.get("status") == "PASS" for c in validation_result.get("checklist", []))
-        checksum_status = "PASS" if pan_passed else "FAIL"
-        checksum_detail = "Income Tax Dept 10-character structure valid." if pan_passed else "Invalid PAN entity structure."
+        pan_check = next(
+            (c for c in validation_result.get("checklist", []) if "PAN" in c.get("check", "")),
+            None
+        )
+        if pan_check:
+            checksum_status = pan_check.get("status", "FAIL")
+            checksum_detail = pan_check.get("detail", "Income Tax Dept PAN syntax inspection.")
+        else:
+            checksum_status = "FAIL"
+            checksum_detail = "PAN entity identifier missing or unreadable."
     else:
         checksum_status = "PASS" if format_pass else "WARN"
         checksum_detail = "Standard institutional syntax inspection."
@@ -283,10 +339,11 @@ def run_truthlens_screening(
         biometric_detail = "Awaiting Live Passenger Photo for 1:1 Biometric Verification."
 
     # 5. Watchlist & Mock DB
-    db_hit = validation_result.get("mock_db_hit", False)
+    db_hit = validation_result.get("mock_database_hit") or validation_result.get("mock_db_hit")
     if db_hit:
         watchlist_status = "FAIL"
-        watchlist_detail = f"Alert: Flagged in Border Watchlist ({validation_result.get('mock_db_reason', 'Watchlist hit')})."
+        reason = db_hit.get("reason", "Watchlist hit") if isinstance(db_hit, dict) else validation_result.get("mock_db_reason", "Watchlist hit")
+        watchlist_detail = f"Alert: Flagged in Border Watchlist ({reason})."
     else:
         watchlist_status = "PASS"
         watchlist_detail = "Clear: Zero records found in simulated Interpol/Border watchlists."
@@ -307,7 +364,10 @@ def run_truthlens_screening(
     else:
         simple_badge = "REVIEW REQUIRED"
         simple_color = "yellow"
-        simple_headline = "Manual Inspection Required"
+        if any(f.get("category") == "CHECKSUM_FAILURE" for f in risk_report.get("factors", [])):
+            simple_headline = "Checksum Failure • Manual Inspection Required"
+        else:
+            simple_headline = "Manual Inspection Required"
 
     dossier = {
         "is_genuine": is_genuine,
@@ -351,7 +411,16 @@ def run_truthlens_screening(
             "mean_confidence": ocr_result["mean_confidence"],
             "fields": fields,
             "raw_text": ocr_result["raw_text"],
-            "mrz": mrz_data
+            "cleaned_text": ocr_result.get("cleaned_text", ocr_result["raw_text"]),
+            "mrz": mrz_data,
+            "claimed_type": ocr_result.get("claimed_type"),
+            "detected_type": ocr_result.get("detected_type", doc_type),
+            "is_claimed_mismatch": ocr_result.get("is_claimed_mismatch", False),
+            "is_non_identity": ocr_result.get("is_non_identity", False),
+            "mismatch_reason": ocr_result.get("mismatch_reason"),
+            "classification_evidence": ocr_result.get("classification_evidence", {}),
+            "uncertainty": ocr_result.get("uncertainty", False),
+            "classification_scores": ocr_result.get("classification_scores", {})
         },
         "qr": {
             "detected": qr_result.get("detected", False),

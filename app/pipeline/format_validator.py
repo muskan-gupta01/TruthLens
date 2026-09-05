@@ -239,28 +239,81 @@ def validate_pan_number(pan_str: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def validate_aadhaar_number(aadhaar_str: Optional[str]) -> Dict[str, Any]:
-    """Validates 12-digit Aadhaar number with Verhoeff mathematical checksum."""
+def validate_aadhaar_number(aadhaar_str: Optional[str], ocr_conf: Optional[float] = None) -> Dict[str, Any]:
+    """
+    Validates 12-digit Aadhaar number with Verhoeff mathematical checksum.
+    Distinguishes:
+      - Confidently valid checksum
+      - OCR uncertain / malformed extraction
+      - Clearly invalid checksum (counterfeit)
+    """
     if not aadhaar_str:
-        return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": "Aadhaar number missing"}
+        return {
+            "valid": False,
+            "status": "WARN",
+            "label": "⚠ Incomplete",
+            "message": "Aadhaar number missing or obscured by optical glare/blur."
+        }
+
     clean_digits = re.sub(r"\D", "", aadhaar_str)
+
+    # Malformed length check
     if len(clean_digits) != 12:
-        return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": f"Aadhaar number must have exactly 12 digits (found {len(clean_digits)})."}
+        return {
+            "valid": False,
+            "status": "WARN",
+            "label": "⚠ Uncertain",
+            "message": f"OCR Extraction Incomplete: Extracted {len(clean_digits)} digits instead of 12 (likely character drop or scanning artifact)."
+        }
+
+    # Leading digit rule (Aadhaar cannot begin with 0 or 1)
     if clean_digits[0] in ["0", "1"]:
-        return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": "Aadhaar number cannot begin with 0 or 1."}
-    is_valid = validate_verhoeff(clean_digits)
-    if not is_valid:
         return {
             "valid": False,
             "status": "FAIL",
             "label": "✕ Invalid",
-            "message": f"Mathematical Checksum Failure: Aadhaar number '{clean_digits}' failed Verhoeff algorithm verification (counterfeit sequence)."
+            "message": "Aadhaar sequence syntax violation: number cannot begin with 0 or 1."
         }
+
+    is_valid = validate_verhoeff(clean_digits)
+    if is_valid:
+        return {
+            "valid": True,
+            "status": "PASS",
+            "label": "✓ Valid",
+            "message": f"Valid 12-digit Aadhaar ({clean_digits[:4]} {clean_digits[4:8]} {clean_digits[8:]}) with verified Verhoeff checksum."
+        }
+
+    # Verhoeff failed: Distinguish OCR single-character optical misread from deliberate counterfeit
+    # Test if a single-digit substitution results in a valid Verhoeff code
+    single_digit_ambiguity = False
+    for pos in range(12):
+        orig_char = clean_digits[pos]
+        for d in range(10):
+            if str(d) != orig_char:
+                cand = clean_digits[:pos] + str(d) + clean_digits[pos + 1:]
+                if cand[0] not in ["0", "1"] and validate_verhoeff(cand):
+                    single_digit_ambiguity = True
+                    break
+        if single_digit_ambiguity:
+            break
+
+    # If single-digit ambiguity exists and OCR confidence was medium/low or not perfectly crisp:
+    # Treat as OCR uncertainty rather than immediate fraud
+    if single_digit_ambiguity and (ocr_conf is None or ocr_conf < 80.0):
+        return {
+            "valid": False,
+            "status": "WARN",
+            "label": "⚠ Uncertain",
+            "uncertainty": True,
+            "message": f"OCR Checksum Uncertainty: Sequence '{clean_digits[:4]} {clean_digits[4:8]} {clean_digits[8:]}' has a single-digit discrepancy consistent with optical scan noise (manual review recommended, not confirmed counterfeit)."
+        }
+
     return {
-        "valid": True,
-        "status": "PASS",
-        "label": "✓ Valid",
-        "message": f"Valid 12-digit Aadhaar ({clean_digits[:4]} {clean_digits[4:8]} {clean_digits[8:]}) with verified Verhoeff checksum."
+        "valid": False,
+        "status": "FAIL",
+        "label": "✕ Invalid",
+        "message": f"Mathematical Checksum Failure: Aadhaar number '{clean_digits[:4]} {clean_digits[4:8]} {clean_digits[8:]}' failed Verhoeff algorithm verification (invalid sequence)."
     }
 
 
@@ -389,7 +442,8 @@ def validate_document_rules(
             total_warnings += 1
 
     elif doc_type == DOC_TYPE_AADHAAR:
-        res_num = validate_aadhaar_number(doc_num)
+        ocr_conf = ocr_data.get("mean_confidence") if ocr_data else None
+        res_num = validate_aadhaar_number(doc_num, ocr_conf=ocr_conf)
         checklist.append({
             "check": "Aadhaar Verhoeff Checksum",
             "status": res_num["status"],
@@ -398,6 +452,8 @@ def validate_document_rules(
         })
         if res_num["status"] == "FAIL":
             total_failures += 1
+        elif res_num["status"] == "WARN":
+            total_warnings += 1
 
     elif doc_type == DOC_TYPE_PAN:
         res_num = validate_pan_number(doc_num)
@@ -520,6 +576,12 @@ def validate_document_rules(
         })
 
     # Summary verdict
+    has_expired = False
+    for check in checklist:
+        if "EXPIRED" in str(check.get("detail", "")).upper():
+            has_expired = True
+            break
+
     if total_failures > 0:
         overall_status = "FAILED"
         verdict_label = "VALIDATION FAILED"
@@ -531,6 +593,8 @@ def validate_document_rules(
         verdict_label = "ALL CHECKS PASSED"
 
     return {
+        "valid": (total_failures == 0),
+        "expired": has_expired,
         "overall_status": overall_status,
         "verdict_label": verdict_label,
         "total_checks": len(checklist),

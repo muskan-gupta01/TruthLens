@@ -43,22 +43,45 @@ def evaluate_screening_verdict(
     # =========================================================================
     # 1. EVALUATE MATHEMATICAL FORMAT & CHECKSUM
     # =========================================================================
-    id_format = format_result.get("id_validation", {})
-    if id_format.get("valid"):
-        flags_pass.append(f"Format Check: {id_format.get('reason')}")
-        reasons_list.append({
-            "category": "Format & Checksum",
-            "severity": "PASS",
-            "text": id_format.get("reason", "ID format is valid.")
-        })
-    else:
-        # Check if ID was found
-        if ocr_fields.get("id_number"):
-            flags_critical.append(f"Format Failure: {id_format.get('reason')}")
+    checklist = format_result.get("checklist", [])
+    cs_check = next((c for c in checklist if any(k in c.get("check", "") for k in ["Checksum", "Verhoeff", "ICAO", "PAN Syntax"])), None)
+    if cs_check:
+        if cs_check.get("status") == "PASS":
+            flags_pass.append(f"Format Check: {cs_check.get('detail')}")
+            reasons_list.append({
+                "category": "Format & Checksum",
+                "severity": "PASS",
+                "text": cs_check.get("detail", "ID format and checksum are valid.")
+            })
+        elif cs_check.get("status") == "WARN":
+            flags_warning.append(f"Checksum Optical Uncertainty: {cs_check.get('detail')}")
+            reasons_list.append({
+                "category": "Format & Checksum",
+                "severity": "WARNING",
+                "text": cs_check.get("detail", "Checksum uncertainty due to optical scan noise.")
+            })
+        else:
+            flags_critical.append(f"Mathematical Checksum Failure: {cs_check.get('detail')}")
             reasons_list.append({
                 "category": "Format & Checksum",
                 "severity": "CRITICAL",
-                "text": f"Mathematical Checksum Failure: {id_format.get('reason')}"
+                "text": f"Mathematical Checksum Failure: {cs_check.get('detail')}"
+            })
+    else:
+        id_format = format_result.get("id_validation", {})
+        if id_format.get("valid"):
+            flags_pass.append(f"Format Check: {id_format.get('reason')}")
+            reasons_list.append({
+                "category": "Format & Checksum",
+                "severity": "PASS",
+                "text": id_format.get("reason", "ID format is valid.")
+            })
+        elif ocr_fields.get("id_number"):
+            flags_critical.append(f"Format Failure: {id_format.get('reason', 'Invalid format')}")
+            reasons_list.append({
+                "category": "Format & Checksum",
+                "severity": "CRITICAL",
+                "text": f"Mathematical Checksum Failure: {id_format.get('reason', 'Invalid format')}"
             })
         else:
             flags_warning.append("ID number could not be extracted for checksum validation.")
@@ -106,13 +129,13 @@ def evaluate_screening_verdict(
         reasons_list.append({
             "category": "QR Security",
             "severity": "WARNING",
-            "text": "QR code optically detected but cryptographic payload could not be read (low resolution or glare)."
+            "text": "QR code optically detected but encoded payload could not be read (low resolution or glare)."
         })
     else:
         reasons_list.append({
             "category": "QR Security",
             "severity": "PASS",
-            "text": f"QR cryptographic payload decoded successfully (Format: {qr_result.get('fields', {}).get('format', 'Standard')})."
+            "text": f"QR payload decoded successfully (Format: {qr_result.get('fields', {}).get('format', 'Standard')})."
         })
 
     # =========================================================================
@@ -207,7 +230,7 @@ def evaluate_screening_verdict(
             verdict_title = "GENUINE"
             verdict_badge = "VERIFIED_AUTHENTIC"
             confidence = min(88.0 + (5.0 if id_format.get("valid") else 0.0), 98.5)
-            summary_statement = "Document verified authentic across optical, cryptographic, and forensic layers."
+            summary_statement = "Document verified authentic across optical, mathematical, and forensic layers."
         else:
             if id_format.get("address_face"):
                 verdict_title = "GENUINE (ADDRESS FACE)"

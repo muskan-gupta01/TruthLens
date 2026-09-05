@@ -576,10 +576,9 @@
     <!-- ================================================================= -->
     <section id="tab-ocr" class="tab-pane">
       <div class="section-intro">
-        <h1 class="page-title">Module 1: OCR Extraction &amp; MRZ Decoding</h1>
+        <h1 class="page-title">Module 1: OCR Extraction &amp; Field Analysis</h1>
         <p class="page-desc">
-          Optical Character Recognition extracted attributes, confidence metrics, and ICAO Doc 9303 Machine Readable
-          Zone lines.
+          Optical Character Recognition extracted attributes, confidence metrics, and identity/travel field analysis.
         </p>
       </div>
 
@@ -589,7 +588,10 @@
             <h3>Extracted Document Attributes</h3>
             <span class="badge-tech" id="ocr-doc-type-badge">Document: UNKNOWN</span>
           </div>
-          <span class="badge-green" id="ocr-conf-badge">Mean OCR Confidence: --</span>
+          <div class="ocr-conf-group" style="text-align: right;">
+            <span class="badge-green" id="ocr-conf-badge">Mean OCR Confidence: --</span>
+            <div class="ocr-conf-subtext" id="ocr-conf-subtext" style="font-size: 0.72rem; color: var(--text-muted, #8b9bb4); margin-top: 4px;">Recognition confidence only — not authenticity proof.</div>
+          </div>
         </div>
         <div class="card-body">
           <div class="fields-table-wrapper">
@@ -610,8 +612,8 @@
             </table>
           </div>
 
-          <!-- ICAO 9303 MRZ Box -->
-          <div class="mrz-card-box hidden" id="mrz-card-box">
+          <!-- ICAO 9303 MRZ Box (Displayed conditionally for Passport/Visa only) -->
+          <div class="mrz-card-box hidden" id="mrz-card-box" style="display: none;">
             <h4>ICAO Doc 9303 Machine Readable Zone (MRZ)</h4>
             <div class="mrz-lines-display" id="mrz-lines-text">P&lt;USA...</div>
             <div class="mrz-checksum-summary" id="mrz-checksum-summary"></div>
@@ -619,7 +621,7 @@
 
           <!-- Raw OCR Drawer -->
           <details class="raw-ocr-drawer">
-            <summary>View Complete Raw OCR Text</summary>
+            <summary>View Complete OCR Text</summary>
             <pre class="raw-ocr-pre" id="raw-ocr-pre">Awaiting document...</pre>
           </details>
         </div>

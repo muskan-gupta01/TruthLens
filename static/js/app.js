@@ -15,6 +15,27 @@
   let webcamStream = null;
   let currentReport = null;
 
+  // HTML escaping utility for XSS prevention
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Returns authentication headers with session token from localStorage if present
+  function getAuthHeaders(extraHeaders = {}) {
+    const token = localStorage.getItem('truthlens_token');
+    const headers = { ...extraHeaders };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  }
+
   // DOM Elements - Tabs
   const navTabs = document.querySelectorAll('.nav-tab');
   const tabPanes = document.querySelectorAll('.tab-pane');
@@ -359,10 +380,15 @@
       updatePipelineTracker(4);
       const response = await fetch('/api/screen', {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          window.location.href = '/login?redirect=/dashboard';
+          return;
+        }
         const err = await response.json();
         throw new Error(err.detail || 'Screening request failed');
       }
@@ -438,9 +464,19 @@
     const mrzLinesText = document.getElementById('mrz-lines-text');
     const mrzSummary = document.getElementById('mrz-checksum-summary');
 
-    docTypeBadge.textContent = `Document: ${data.doc_type}`;
+    if (data.ocr && data.ocr.is_claimed_mismatch) {
+      docTypeBadge.textContent = `Claimed: ${data.ocr.claimed_type || 'AUTO'} ➔ Detected: ${data.doc_type}`;
+      docTypeBadge.className = 'badge-red';
+    } else {
+      docTypeBadge.textContent = `Document: ${data.doc_type}`;
+      docTypeBadge.className = 'badge-tech';
+    }
     ocrConfBadge.textContent = `Mean OCR Confidence: ${data.ocr.mean_confidence}%`;
-    rawOcrPre.textContent = data.ocr.raw_text || 'No raw text extracted.';
+    const ocrConfSubtext = document.getElementById('ocr-conf-subtext');
+    if (ocrConfSubtext) {
+      ocrConfSubtext.textContent = 'Recognition confidence only — not authenticity proof.';
+    }
+    rawOcrPre.textContent = (data.ocr && (data.ocr.cleaned_text || data.ocr.raw_text)) || 'No raw text extracted.';
 
     // Populate Fields Table
     const fields = data.ocr.fields || {};
@@ -452,8 +488,8 @@
     } else {
       fieldEntries.forEach(([key, val]) => {
         if (key === 'raw_numbers' || key === 'dates') return;
-        const formattedKey = key.replace(/_/g, ' ').toUpperCase();
-        const displayVal = val !== null && val !== undefined && val !== '' ? String(val) : '<em class="text-dim">Not Detected</em>';
+        const formattedKey = escapeHtml(key.replace(/_/g, ' ').toUpperCase());
+        const displayVal = val !== null && val !== undefined && val !== '' ? escapeHtml(val) : '<em class="text-dim">Not Detected</em>';
         const isDetected = val !== null && val !== undefined && val !== '';
         const badgeHtml = isDetected ? '<span class="badge-green">Extracted</span>' : '<span class="badge-yellow">Missing</span>';
 
@@ -467,9 +503,14 @@
       });
     }
 
-    // MRZ Display
-    if (data.ocr.mrz && data.ocr.mrz.valid_structure) {
+    // MRZ Display: strictly conditional on document type supporting MRZ
+    const docType = data.doc_type || (data.ocr && data.ocr.doc_type);
+    const mrzSupportedTypes = ['PASSPORT', 'VISA'];
+    const isMrzSupported = mrzSupportedTypes.includes(docType);
+
+    if (isMrzSupported && data.ocr && data.ocr.mrz && data.ocr.mrz.valid_structure) {
       mrzBox.classList.remove('hidden');
+      mrzBox.style.display = 'block';
       const mrz = data.ocr.mrz;
       mrzLinesText.textContent = `P<${mrz.issuing_country || 'USA'}${mrz.surname || ''}<<${mrz.given_names || ''}\n${mrz.doc_number || ''}${mrz.nationality || ''}`;
       const allPassed = mrz.checksums && mrz.checksums.all_passed;
@@ -478,6 +519,7 @@
         '<span class="badge-red">✕ Mathematical Check Digit Failure Detected</span>';
     } else {
       mrzBox.classList.add('hidden');
+      mrzBox.style.display = 'none';
     }
 
     // QR Cross-Verification Display
@@ -501,10 +543,10 @@
           : (row.status === 'MISMATCH' ? '<span class="badge-red">MISMATCH (TAMPER ALERT)</span>' : '<span class="badge-yellow">MISSING</span>');
 
         tr.innerHTML = `
-          <td><strong>${row.field}</strong></td>
-          <td>${row.ocr_val || '<em class="text-dim">N/A</em>'}</td>
-          <td>${row.qr_val || '<em class="text-dim">N/A</em>'}</td>
-          <td>${badge}<br><small style="color: #94A3B8;">${row.explanation || ''}</small></td>
+          <td><strong>${escapeHtml(row.field)}</strong></td>
+          <td>${row.ocr_val ? escapeHtml(row.ocr_val) : '<em class="text-dim">N/A</em>'}</td>
+          <td>${row.qr_val ? escapeHtml(row.qr_val) : '<em class="text-dim">N/A</em>'}</td>
+          <td>${badge}<br><small style="color: #94A3B8;">${escapeHtml(row.explanation || '')}</small></td>
         `;
         qrCrossTbody.appendChild(tr);
       });
@@ -528,13 +570,14 @@
 
     checklist.forEach(item => {
       const card = document.createElement('div');
-      card.className = `checklist-item ${item.status.toLowerCase()}`;
+      const st = escapeHtml((item.status || 'pass').toLowerCase());
+      card.className = `checklist-item ${st}`;
       card.innerHTML = `
         <div class="check-top">
-          <span class="check-title">${item.check}</span>
-          <span class="check-badge status-${item.status.toLowerCase()}">${item.badge}</span>
+          <span class="check-title">${escapeHtml(item.check)}</span>
+          <span class="check-badge status-${st}">${escapeHtml(item.badge)}</span>
         </div>
-        <p class="check-detail">${item.detail}</p>
+        <p class="check-detail">${escapeHtml(item.detail)}</p>
       `;
       container.appendChild(card);
     });
@@ -544,10 +587,10 @@
       mockCallout.classList.remove('hidden');
       const hit = val.mock_database_hit;
       mockCalloutText.innerHTML = `
-        <strong>Matched Record:</strong> ${hit.person_name} (${hit.doc_number})<br>
-        <strong>Status:</strong> <span class="badge-red">${hit.status}</span><br>
-        <strong>Reason:</strong> ${hit.reason}<br>
-        <strong>Notes:</strong> ${hit.notes}
+        <strong>Matched Record:</strong> ${escapeHtml(hit.person_name)} (${escapeHtml(hit.doc_number)})<br>
+        <strong>Status:</strong> <span class="badge-red">${escapeHtml(hit.status)}</span><br>
+        <strong>Reason:</strong> ${escapeHtml(hit.reason)}<br>
+        <strong>Notes:</strong> ${escapeHtml(hit.notes)}
       `;
     } else {
       mockCallout.classList.add('hidden');
@@ -735,10 +778,10 @@
         const row = document.createElement('tr');
         const badgeClass = f.severity === 'CRITICAL' || f.severity === 'HIGH' ? 'badge-red' : (f.severity === 'WARN' ? 'badge-yellow' : 'badge-tech');
         row.innerHTML = `
-          <td><span class="${badgeClass}">${f.severity}</span></td>
-          <td><strong>${f.name}</strong></td>
-          <td>${f.description}</td>
-          <td style="font-family: var(--font-mono); font-weight: bold; color: #F87171;">+${f.points}</td>
+          <td><span class="${badgeClass}">${escapeHtml(f.severity)}</span></td>
+          <td><strong>${escapeHtml(f.name)}</strong></td>
+          <td>${escapeHtml(f.description)}</td>
+          <td style="font-family: var(--font-mono); font-weight: bold; color: #F87171;">+${Number(f.points) || 0}</td>
         `;
         factorsTbody.appendChild(row);
       });
@@ -930,7 +973,7 @@
 
       checkpoints.forEach(cp => {
         const item = document.createElement('div');
-        const st = (cp.status || 'PASS').toLowerCase();
+        const st = escapeHtml((cp.status || 'PASS').toLowerCase());
         item.className = `checkpoint-card status-${st}`;
         
         const iconSymbol = st === 'pass' ? '✅' : (st === 'fail' ? '❌' : (st === 'warn' ? '⚠️' : 'ℹ️'));
@@ -939,10 +982,10 @@
           <div class="cp-icon">${iconSymbol}</div>
           <div class="cp-body">
             <div class="cp-title-row">
-              <span class="cp-title">${cp.title}</span>
-              <span class="cp-badge ${st}">${cp.status}</span>
+              <span class="cp-title">${escapeHtml(cp.title)}</span>
+              <span class="cp-badge ${st}">${escapeHtml(cp.status)}</span>
             </div>
-            <p class="cp-detail">${cp.detail}</p>
+            <p class="cp-detail">${escapeHtml(cp.detail)}</p>
           </div>
         `;
         stack.appendChild(item);
@@ -1010,8 +1053,11 @@
   // =========================================================================
   async function loadDashboardStats() {
     try {
-      const res = await fetch('/api/stats');
-      if (!res.ok) return;
+      const res = await fetch('/api/stats', { headers: getAuthHeaders() });
+      if (!res.ok) {
+        if (res.status === 401) window.location.href = '/login?redirect=/dashboard';
+        return;
+      }
       const stats = await res.json();
 
       document.getElementById('kpi-total').textContent = stats.total_screened || 0;
@@ -1047,8 +1093,14 @@
     const tbody = document.getElementById('history-tbody');
     try {
       tbody.innerHTML = `<tr><td colspan="8" class="table-empty">Loading records...</td></tr>`;
-      const res = await fetch('/api/history');
-      if (!res.ok) throw new Error('Failed to fetch history');
+      const res = await fetch('/api/history', { headers: getAuthHeaders() });
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = '/login?redirect=/dashboard';
+          return;
+        }
+        throw new Error('Failed to fetch history');
+      }
       const data = await res.json();
       const rows = data.history || [];
 
@@ -1060,17 +1112,17 @@
 
       rows.forEach(r => {
         const tr = document.createElement('tr');
-        const badgeClass = r.verdict.includes('VERIFIED') ? 'badge-green' : (r.verdict.includes('REVIEW') ? 'badge-yellow' : 'badge-red');
+        const badgeClass = String(r.verdict || '').includes('VERIFIED') ? 'badge-green' : (String(r.verdict || '').includes('REVIEW') ? 'badge-yellow' : 'badge-red');
         tr.innerHTML = `
-          <td><strong style="font-family: var(--font-mono); font-size: 0.82rem;">${r.screening_id}</strong></td>
-          <td style="font-size: 0.8rem; color: var(--text-dim);">${r.timestamp}</td>
-          <td><span class="badge-tech">${r.doc_type}</span></td>
-          <td><strong>${r.person_name || 'N/A'}</strong></td>
-          <td style="font-family: var(--font-mono);">${r.doc_number || 'N/A'}</td>
-          <td style="font-family: var(--font-tech); font-weight: bold;">${r.risk_score}</td>
-          <td><span class="${badgeClass}">${r.verdict}</span></td>
+          <td><strong style="font-family: var(--font-mono); font-size: 0.82rem;">${escapeHtml(r.screening_id)}</strong></td>
+          <td style="font-size: 0.8rem; color: var(--text-dim);">${escapeHtml(r.timestamp)}</td>
+          <td><span class="badge-tech">${escapeHtml(r.doc_type)}</span></td>
+          <td><strong>${escapeHtml(r.person_name || 'N/A')}</strong></td>
+          <td style="font-family: var(--font-mono);">${escapeHtml(r.doc_number || 'N/A')}</td>
+          <td style="font-family: var(--font-tech); font-weight: bold;">${Number(r.risk_score) || 0}</td>
+          <td><span class="${badgeClass}">${escapeHtml(r.verdict)}</span></td>
           <td>
-            <button type="button" class="cyber-btn btn-secondary btn-sm btn-view-history-record" data-id="${r.screening_id}">
+            <button type="button" class="cyber-btn btn-secondary btn-sm btn-view-history-record" data-id="${escapeHtml(r.screening_id)}">
               Inspect
             </button>
           </td>
@@ -1082,7 +1134,7 @@
       document.querySelectorAll('.btn-view-history-record').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.dataset.id;
-          const repRes = await fetch(`/api/history/${id}`);
+          const repRes = await fetch(`/api/history/${id}`, { headers: getAuthHeaders() });
           if (repRes.ok) {
             const rep = await repRes.json();
             currentReport = rep;
@@ -1093,7 +1145,7 @@
       });
 
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="8" class="table-empty text-red">Failed to load history: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="table-empty text-red">Failed to load history: ${escapeHtml(e.message)}</td></tr>`;
     }
   }
 
@@ -1107,8 +1159,14 @@
     const tbody = document.getElementById('mockdb-tbody');
     try {
       tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Loading mock database records...</td></tr>`;
-      const res = await fetch('/api/mock-db');
-      if (!res.ok) throw new Error('Failed to fetch mock DB');
+      const res = await fetch('/api/mock-db', { headers: getAuthHeaders() });
+      if (!res.ok) {
+        if (res.status === 401) {
+          window.location.href = '/login?redirect=/dashboard';
+          return;
+        }
+        throw new Error('Failed to fetch mock DB');
+      }
       const data = await res.json();
       const records = data.records || [];
 
@@ -1121,18 +1179,18 @@
       records.forEach(r => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td style="font-family: var(--font-mono); font-weight: bold; color: var(--teal-neon);">${r.doc_number}</td>
-          <td><span class="badge-tech">${r.doc_type}</span></td>
-          <td><strong>${r.person_name}</strong></td>
-          <td><span class="badge-red">${r.status}</span></td>
-          <td>${r.reason}</td>
-          <td><span class="badge-tech">${r.issuing_country}</span></td>
-          <td style="font-size: 0.8rem; color: var(--text-dim);">${r.notes || '--'}</td>
+          <td style="font-family: var(--font-mono); font-weight: bold; color: var(--teal-neon);">${escapeHtml(r.doc_number)}</td>
+          <td><span class="badge-tech">${escapeHtml(r.doc_type)}</span></td>
+          <td><strong>${escapeHtml(r.person_name)}</strong></td>
+          <td><span class="badge-red">${escapeHtml(r.status)}</span></td>
+          <td>${escapeHtml(r.reason)}</td>
+          <td><span class="badge-tech">${escapeHtml(r.issuing_country)}</span></td>
+          <td style="font-size: 0.8rem; color: var(--text-dim);">${escapeHtml(r.notes || '--')}</td>
         `;
         tbody.appendChild(tr);
       });
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" class="table-empty text-red">Failed to load mock database: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="table-empty text-red">Failed to load mock database: ${escapeHtml(e.message)}</td></tr>`;
     }
   }
 

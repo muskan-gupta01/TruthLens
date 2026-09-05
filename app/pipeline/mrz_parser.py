@@ -152,20 +152,22 @@ def find_and_parse_mrz(ocr_text: str) -> Optional[Dict[str, Any]]:
     """
     lines = [l.strip().replace(" ", "") for l in ocr_text.splitlines() if l.strip()]
 
-    # Look for candidate TD3 lines: starting with P< or containing frequent '<' signs
+    # Require line to contain actual MRZ delimiter characters ('<') in original text
     candidate_lines = []
     for line in lines:
-        cleaned = re.sub(r"[^A-Za-z0-9<]", "<", line)
-        if len(cleaned) >= 30 and cleaned.count("<") >= 2:
+        if "<" in line and len(line) >= 30 and line.count("<") >= 2:
+            cleaned = re.sub(r"[^A-Za-z0-9<]", "<", line)
             candidate_lines.append(cleaned)
 
-    # TD3 Match: exactly 2 lines >= 40 chars
+    # TD3 Match: exactly 2 lines >= 38 chars starting with P<
     for i in range(len(candidate_lines) - 1):
         l1 = candidate_lines[i]
         l2 = candidate_lines[i+1]
-        if l1.startswith("P") and (len(l1) >= 40 or len(l2) >= 40):
+        if re.match(r"^P[A-Z0-9<]?<", l1) and len(l1) >= 38 and len(l2) >= 38:
             try:
-                return parse_mrz_td3([l1, l2])
+                res = parse_mrz_td3([l1, l2])
+                if res and res.get("valid_structure"):
+                    return res
             except Exception as e:
                 print(f"[MRZ PARSER] Error parsing TD3: {e}")
 

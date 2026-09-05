@@ -132,126 +132,124 @@ def extract_text_and_data(image_input) -> Tuple[str, float]:
         return raw_text, round(mean_conf, 1)
 
     except Exception as e:
-        # Check if input is a known demonstration sample (offline / no-tesseract fallback)
-        fallback = _get_demo_sample_fallback_text(cv_img)
-        if fallback:
-            return fallback
         print(f"[OCR ERROR] Failed to run pytesseract: {e}")
         return "", 0.0
 
 
+# Whitelisted short tokens that must NEVER be removed as noise
+VALID_SHORT_TOKENS = {
+    "DOB", "ID", "PAN", "DL", "C/O", "S/O", "D/O", "W/O",
+    "NO", "TO", "OF", "IN", "AT", "BY", "PIN", "M", "F",
+    "IND", "USA", "CAN", "GBR", "DEU", "FRA", "VID", "YOB"
+}
+
+# Known OCR confusion artifacts / isolated garbage words
+KNOWN_OCR_NOISE_TOKENS = {
+    "AWE", "WAA", "WRAEW", "FARARST", "HIHI", "HHH", "AXX", "AX", "AL", "ANA"
+}
+
+
+def clean_ocr_text(raw_text: str) -> str:
+    """
+    Cleans raw OCR output by filtering out obvious OCR noise artifacts:
+    - lines containing only repeated symbols (e.g., '____', '--', '===', '...')
+    - isolated meaningless fragments (e.g., 'al', 'aX', '= awe')
+    - obvious OCR artifacts and sensor junk
+    Preserves all valid tokens (DOB, ID, PAN, C/O, names, dates, numbers).
+    Does NOT invent, alter, or hallucinate text.
+    """
+    if not raw_text:
+        return ""
+
+    cleaned_lines = []
+    raw_lines = raw_text.splitlines()
+
+    for line in raw_lines:
+        trimmed = line.strip()
+        if not trimmed:
+            continue
+
+        # 1. Pure symbol / non-alphanumeric lines: '____', '--', '====', '...', etc.
+        if not re.search(r"[A-Za-z0-9]", trimmed):
+            continue
+
+        # 2. Extract core alphanumeric content by stripping surrounding punctuation/symbols
+        core = re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", trimmed).strip()
+        if not core:
+            continue
+
+        core_upper = core.upper()
+
+        # 3. Always preserve known valid short tokens (DOB, ID, PAN, C/O, M, F, etc.)
+        if core_upper in VALID_SHORT_TOKENS or trimmed.upper() in VALID_SHORT_TOKENS:
+            cleaned_lines.append(trimmed)
+            continue
+
+        # 4. Filter known isolated noise tokens (awe, al, aX, waa, wraew, etc.)
+        if core_upper in KNOWN_OCR_NOISE_TOKENS:
+            continue
+
+        # 5. Filter lines starting with symbol noise like '= awe', '~ ax', '- al', etc.
+        if re.match(r"^[^A-Za-z0-9\s]", trimmed) and len(core) <= 4:
+            if core_upper not in VALID_SHORT_TOKENS and not re.search(r"\d", core):
+                continue
+
+        # 6. Filter isolated 1-character non-whitelisted fragments ('~', 'l', 'a', etc.)
+        if len(core) <= 1 and not re.search(r"\d", core):
+            continue
+
+        # 7. Filter isolated 2-character non-whitelisted fragments (e.g. 'al', 'aX')
+        if len(core) == 2 and not re.search(r"\d", core):
+            if core_upper not in VALID_SHORT_TOKENS:
+                continue
+
+        # 8. Filter isolated lowercase 3-letter words that are not names or tokens (e.g. 'awe')
+        if len(core.split()) == 1 and len(core) == 3 and core.islower() and not re.search(r"\d", core):
+            if core_upper not in VALID_SHORT_TOKENS:
+                continue
+
+        # 9. Filter words with repeated identical characters (e.g. 'aaa', 'www', 'ooo')
+        if re.search(r"(.)\1\1", core.lower()):
+            continue
+
+        # Valid line
+        cleaned_lines.append(trimmed)
+
+    return "\n".join(cleaned_lines)
+
+
 def _get_demo_sample_fallback_text(cv_img: np.ndarray) -> Optional[Tuple[str, float]]:
     """
-    Provides deterministic OCR fallback for pre-generated demonstration samples
-    when the local machine lacks system Tesseract OCR installation.
+    Synthetic dimension-based fallback has been removed to prevent injection of
+    predetermined genuine document text into malicious or forged inputs.
+    Returns None so real OCR and subsequent forensic checks operate honestly.
     """
-    if cv_img is None:
-        return None
-    h, w = cv_img.shape[:2]
-
-    # Check 1: Schengen Visa (960 x 650)
-    if w == 960 and h == 650:
-        text = (
-            "SCHENGEN VISA / VISA DE COURT SEJOUR\n"
-            "VALID FOR: ETATS SCHENGEN\n"
-            "FROM: 15/07/2023  UNTIL: 15/01/2024\n"
-            "TYPE OF VISA: C  NUMBER OF ENTRIES: MULT\n"
-            "DURATION OF STAY: 90 DAYS\n"
-            "ISSUED IN: PARIS  ON: 10/07/2023\n"
-            "PASSPORT NO: V9284710\n"
-            "SURNAME, NAME: GONZALEZ, MARIA\n"
-            "V<FRAGONZALEZ<<MARIA<<<<<<<<<<<<<<<<<<<<<<<<\n"
-            "V9284710<8FRA8511224F2401155<<<<<<<<<<<<<<00"
-        )
-        return text, 88.0
-
-    # Check 2: Passports (980 x 680)
-    if w == 980 and h == 680:
-        portrait_roi = cv_img[130:360, 50:220]
-        mean_b = float(np.mean(portrait_roi[:, :, 0]))
-        mean_r = float(np.mean(portrait_roi[:, :, 2]))
-
-        # Top bar color (y: 20, x: 200)
-        top_color = cv_img[20, 200]
-        # In US passport, top bar is dark navy (B: 45-60, G: 25-35, R: 10-20)
-        if top_color[2] < 50 and top_color[0] > 30 and abs(mean_r - mean_b) < 60:
-            # Genuine US Passport (Johnathan Doe)
-            text = (
-                "PASSPORT / PASSEPORT\n"
-                "UNITED STATES OF AMERICA\n"
-                "Type: P  Code: USA  Passport No: A89412051\n"
-                "Surname: DOE\n"
-                "Given Names: JOHNATHAN\n"
-                "Nationality: UNITED STATES OF AMERICA\n"
-                "Date of birth: 15/04/1988\n"
-                "Sex: M\n"
-                "Date of issue: 11/08/2022\n"
-                "Date of expiry: 10/08/2032\n"
-                "Authority: UNITED STATES DEPARTMENT OF STATE\n"
-                "P<USADOE<<JOHNATHAN<<<<<<<<<<<<<<<<<<<<<<<<<\n"
-                "A894120514USA8804153M3208106<<<<<<<<<<<<<<02"
-            )
-            return text, 92.0
-        else:
-            # Tampered Passport (Vikram Mehta)
-            text = (
-                "PASSPORT / PASSEPORT\n"
-                "REPUBLIC OF INDIA\n"
-                "Type: P  Code: IND  Passport No: L898902C3\n"
-                "Surname: MEHTA\n"
-                "Given Names: VIKRAM\n"
-                "Nationality: INDIAN\n"
-                "Date of birth: 01/01/1990\n"
-                "Sex: M\n"
-                "Date of issue: 02/01/2020\n"
-                "Date of expiry: 01/01/2030\n"
-                "P<INDMEHTA<<VIKRAM<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
-                "L898902C32IND9001015M3001014<<<<<<<<<<<<<<06"
-            )
-            return text, 85.0
-
-    # Check 3: Domestic IDs (860 x 540)
-    if w == 860 and h == 540:
-        top_bar = cv_img[10:50, 100:300]
-        mean_b = float(np.mean(top_bar[:, :, 0]))
-        mean_r = float(np.mean(top_bar[:, :, 2]))
-
-        if mean_b > mean_r + 40:
-            # PAN Card (Income Tax Department - Priya Sharma)
-            text = (
-                "INCOME TAX DEPARTMENT\n"
-                "GOVT. OF INDIA\n"
-                "Permanent Account Number\n"
-                "ABCPS1234F\n"
-                "Name: PRIYA SHARMA\n"
-                "Father's Name: RAMESH SHARMA\n"
-                "Date of Birth: 18/09/1994\n"
-            )
-            return text, 90.0
-        else:
-            # Aadhaar Card (UIDAI - Aakash Verma)
-            text = (
-                "GOVERNMENT OF INDIA\n"
-                "Unique Identification Authority of India\n"
-                "Aakash Verma\n"
-                "DOB: 12/05/1992\n"
-                "Male\n"
-                "5489 2104 7834\n"
-                "Mera Aadhaar, Meri Pehchan"
-            )
-            return text, 90.0
-
     return None
 
 
 def classify_document_evidence(text: str, user_hint: Optional[str] = None, mrz_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Evaluates multi-modal optical evidence to classify document type and verify
+    Evaluates multi-modal optical evidence to independently classify document type and verify
     conformance against user-claimed document type (anti-impersonation / fraud check).
+
+    Separates:
+      1. claimed_type: What the user selected at intake
+      2. detected_type: What the optical evidence independently confirms
+      3. is_claimed_mismatch: Signal if claimed and detected conflict
     """
     text_upper = text.upper()
     clean_norm = " ".join(re.sub(r"[^A-Z0-9\s]", " ", text_upper).split())
 
+    # Official government domains (Indian & International)
+    GOV_DOMAINS = [
+        "UIDAI.GOV.IN", "WWW.UIDAI.GOV.IN", "HELP@UIDAI.GOV.IN",
+        "INCOMETAX.GOV.IN", "INCOMETAXINDIA.GOV.IN", "PASSPORTINDIA.GOV.IN",
+        "PARIVAHAN.GOV.IN", "GOV.IN", "NIC.IN", "INDIA.GOV.IN"
+    ]
+
+    has_gov_domain = any(domain in text_upper for domain in GOV_DOMAINS)
+
+    # Document-specific official institutional keyword dictionaries
     passport_keywords = [
         "PASSPORT", "PASSEPORT", "REPUBLIC OF", "UNITED STATES OF AMERICA",
         "P<", "NATIONALITY", "SURNAME", "GIVEN NAMES", "DATE OF EXPIRY", "PASSPORT NO"
@@ -262,7 +260,7 @@ def classify_document_evidence(text: str, user_hint: Optional[str] = None, mrz_d
     ]
     dl_keywords = [
         "DRIVING LICENCE", "DRIVING LICENSE", "MOTOR VEHICLES", "TRANSPORT",
-        "DL NO", "AUTHORISATION TO DRIVE", "VEHICLE CLASS", "LMV", "MCWG"
+        "DL NO", "AUTHORISATION TO DRIVE", "VEHICLE CLASS", "LMV", "MCWG", "PARIVAHAN"
     ]
     permit_keywords = [
         "TRAVEL PERMIT", "ENTRY AUTHORIZATION", "RESIDENCE PERMIT", "BORDER TRANSIT",
@@ -271,138 +269,234 @@ def classify_document_evidence(text: str, user_hint: Optional[str] = None, mrz_d
     aadhaar_keywords = [
         "AADHAAR", "AADHAR", "UIDAI", "UNIQUE IDENTIFICATION", "AUTHORITY OF INDIA",
         "GOVERNMENT OF INDIA", "GOVT OF INDIA", "BHARAT SARKAR", "MERA AADHAAR", "MERI PEHCHAN",
-        "ENROLMENT NO", "1947", "HELP@UIDAI"
+        "ENROLMENT NO", "1947", "HELP@UIDAI", "EAADHAAR", "E-AADHAAR", "VID:"
     ]
     pan_keywords = [
-        "INCOME TAX DEPARTMENT", "PERMANENT ACCOUNT NUMBER", "INCOMETAX", "PAN CARD"
-    ]
-    business_card_keywords = [
-        "CHIEF EXECUTIVE", "MANAGING DIRECTOR", "DIRECTOR", "FOUNDER", "CO-FOUNDER",
-        "GENERAL MANAGER", "MANAGER", "CONSULTANT", "ADVOCATE", "LAWYER", "ENGINEER",
-        "DEVELOPER", "ARCHITECT", "PROPRIETOR", "PROP.", "PARTNER", "ASSOCIATE",
-        "PVT LTD", "PVT. LTD.", "PRIVATE LIMITED", "LIMITED", "LLP", "INC.", "CORP",
-        "SOLUTIONS", "SERVICES", "TECHNOLOGIES", "ENTERPRISES", "INDUSTRIES", "VENTURES",
-        "AGENCY", "STUDIO", "WWW.", "HTTP", ".COM", ".IN", ".ORG", ".NET", ".IO",
-        "EMAIL:", "E-MAIL:", "WEBSITE:", "MOB:", "MOBILE:", "PH:", "PHONE:", "TEL:",
-        "FAX:", "OFFICE:", "HEAD OFFICE", "DEALS IN", "SPECIALIST IN", "OUR SERVICES", "CONTACT US"
+        "INCOME TAX DEPARTMENT", "PERMANENT ACCOUNT NUMBER", "INCOMETAX", "PAN CARD",
+        "GOVT. OF INDIA", "GOVERNMENT OF INDIA"
     ]
 
-    scores = {
-        DOC_TYPE_PASSPORT: sum(3 for kw in passport_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_VISA: sum(3 for kw in visa_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_DRIVING_LICENSE: sum(3 for kw in dl_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_PERMIT: sum(3 for kw in permit_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_AADHAAR: sum(3 for kw in aadhaar_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_PAN: sum(3 for kw in pan_keywords if kw in text_upper or kw in clean_norm),
-        DOC_TYPE_BUSINESS_CARD: sum(3 for kw in business_card_keywords if kw in text_upper or kw in clean_norm)
+    # Strong commercial entity tokens - required to classify as a business card
+    corporate_entity_tokens = [
+        "PVT LTD", "PVT. LTD.", "PRIVATE LIMITED", "LLP", "INC.", "CORP.", "LIMITED",
+        "ENTERPRISE", "ENTERPRISES", "INDUSTRIES", "VENTURES", "SOLUTIONS",
+        "TECHNOLOGIES", "CONSULTING", "CONSULTANT", "SERVICES", "AGENCY", "STUDIO",
+        "GSTIN", "CIN:"
+    ]
+
+    # Executive designations (only meaningful when accompanied by corporate entity context)
+    executive_titles = [
+        "CHIEF EXECUTIVE", "MANAGING DIRECTOR", "FOUNDER", "CO-FOUNDER",
+        "PRESIDENT", "VICE PRESIDENT", "DIRECTOR", "CEO", "CTO", "COO", "CFO",
+        "PROPRIETOR", "PARTNER", "GENERAL MANAGER"
+    ]
+
+    evidence: Dict[str, List[str]] = {
+        DOC_TYPE_PASSPORT: [],
+        DOC_TYPE_VISA: [],
+        DOC_TYPE_DRIVING_LICENSE: [],
+        DOC_TYPE_PERMIT: [],
+        DOC_TYPE_AADHAAR: [],
+        DOC_TYPE_PAN: [],
+        DOC_TYPE_BUSINESS_CARD: []
     }
 
-    # Regex pattern boosts
+    # 1. Evaluate institutional government keywords
+    for kw in passport_keywords:
+        if kw in text_upper or kw in clean_norm:
+            evidence[DOC_TYPE_PASSPORT].append(kw)
+
+    for kw in visa_keywords:
+        if kw in text_upper or kw in clean_norm:
+            evidence[DOC_TYPE_VISA].append(kw)
+
+    for kw in dl_keywords:
+        if kw in text_upper or kw in clean_norm:
+            evidence[DOC_TYPE_DRIVING_LICENSE].append(kw)
+
+    for kw in permit_keywords:
+        if kw in text_upper or kw in clean_norm:
+            evidence[DOC_TYPE_PERMIT].append(kw)
+
+    for kw in aadhaar_keywords:
+        if kw in text_upper or kw in clean_norm:
+            evidence[DOC_TYPE_AADHAAR].append(kw)
+
+    for kw in pan_keywords:
+        if kw in text_upper or kw in clean_norm:
+            evidence[DOC_TYPE_PAN].append(kw)
+
+    # 2. Government domain boosts
+    if has_gov_domain:
+        matched_gov_domains = [d for d in GOV_DOMAINS if d in text_upper]
+        if any("UIDAI" in d for d in matched_gov_domains):
+            evidence[DOC_TYPE_AADHAAR].extend(matched_gov_domains)
+        elif any("INCOMETAX" in d for d in matched_gov_domains):
+            evidence[DOC_TYPE_PAN].extend(matched_gov_domains)
+        else:
+            evidence[DOC_TYPE_AADHAAR].extend(matched_gov_domains)
+
+    # 3. Commercial evidence for business card classification
+    matched_corp_tokens = [tok for tok in corporate_entity_tokens if tok in text_upper]
+    matched_exec_titles = [title for title in executive_titles if re.search(rf"\b{re.escape(title)}\b", text_upper)]
+
+    # Check for commercial non-government contact details
+    emails = re.findall(r"\b[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b", text)
+    commercial_emails = [e for e in emails if not any(gov in e.upper() for gov in ["GOV.IN", "NIC.IN", "UIDAI"])]
+
+    urls = re.findall(r"\b(?:WWW\.[A-Z0-9\-\.]+\.[A-Z]{2,}|https?://[A-Z0-9\-\.]+)\b", text_upper)
+    commercial_urls = [u for u in urls if not any(gov in u for gov in ["GOV.IN", "NIC.IN", "UIDAI"])]
+
+    if matched_corp_tokens:
+        evidence[DOC_TYPE_BUSINESS_CARD].extend(matched_corp_tokens)
+    if commercial_emails:
+        evidence[DOC_TYPE_BUSINESS_CARD].append(f"Commercial Email: {commercial_emails[0]}")
+    if commercial_urls:
+        evidence[DOC_TYPE_BUSINESS_CARD].append(f"Commercial Web: {commercial_urls[0]}")
+    if matched_exec_titles and (matched_corp_tokens or commercial_emails or commercial_urls):
+        evidence[DOC_TYPE_BUSINESS_CARD].extend(matched_exec_titles)
+
+    # Calculate weighted scores
+    scores = {
+        DOC_TYPE_PASSPORT: len(evidence[DOC_TYPE_PASSPORT]) * 3,
+        DOC_TYPE_VISA: len(evidence[DOC_TYPE_VISA]) * 3,
+        DOC_TYPE_DRIVING_LICENSE: len(evidence[DOC_TYPE_DRIVING_LICENSE]) * 3,
+        DOC_TYPE_PERMIT: len(evidence[DOC_TYPE_PERMIT]) * 3,
+        DOC_TYPE_AADHAAR: len(evidence[DOC_TYPE_AADHAAR]) * 3,
+        DOC_TYPE_PAN: len(evidence[DOC_TYPE_PAN]) * 3,
+        DOC_TYPE_BUSINESS_CARD: (
+            len(matched_corp_tokens) * 4 +
+            (len(matched_exec_titles) * 3 if matched_corp_tokens else 0) +
+            (4 if commercial_emails else 0) +
+            (4 if commercial_urls else 0)
+        )
+    }
+
+    # Institutional Format Regex Boosts
     if re.search(r"P<[A-Z0-9<]{30,}", text) or (mrz_data and mrz_data.get("valid_structure")):
-        scores[DOC_TYPE_PASSPORT] += 12
+        scores[DOC_TYPE_PASSPORT] += 15
+        evidence[DOC_TYPE_PASSPORT].append("ICAO Doc 9303 MRZ Structure")
+
     if re.search(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b", text_upper):
-        scores[DOC_TYPE_PAN] += 10
-    if re.search(r"\b[2-9]\d{3}\s\d{4}\s\d{4}\b", text):
-        scores[DOC_TYPE_AADHAAR] += 10
-    elif re.search(r"\b\d{4}\s\d{4}\s\d{4}\b", text):
-        scores[DOC_TYPE_AADHAAR] += 6
+        scores[DOC_TYPE_PAN] += 12
+        evidence[DOC_TYPE_PAN].append("PAN 10-Character Syntax")
+
+    if re.search(r"\b[2-9]\d{3}[-\s]\d{4}[-\s]\d{4}\b", text):
+        scores[DOC_TYPE_AADHAAR] += 12
+        evidence[DOC_TYPE_AADHAAR].append("12-Digit Aadhaar Format")
+    elif re.search(r"\b\d{4}[-\s]\d{4}[-\s]\d{4}\b", text):
+        scores[DOC_TYPE_AADHAAR] += 8
+        evidence[DOC_TYPE_AADHAAR].append("12-Digit Numeric Grouping")
+
     if re.search(r"V<[A-Z0-9<]{30,}", text):
-        scores[DOC_TYPE_VISA] += 12
+        scores[DOC_TYPE_VISA] += 15
+        evidence[DOC_TYPE_VISA].append("ICAO Visa MRZ Structure")
 
-    # Business card regex boosts
-    if re.search(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", text):
-        scores[DOC_TYPE_BUSINESS_CARD] += 6
-    if re.search(r"\b(WWW\.[A-Z0-9\-\.]+\.[A-Z]{2,}|https?://)\b", text_upper):
-        scores[DOC_TYPE_BUSINESS_CARD] += 6
-    if re.search(r"\b(PVT\.?\s*LTD\.?|PRIVATE\s+LIMITED|LLP|INC\.?|CORP\.?)\b", text_upper):
-        scores[DOC_TYPE_BUSINESS_CARD] += 8
-    if re.search(r"\b(CEO|FOUNDER|DIRECTOR|MANAGER|CONSULTANT|ENGINEER)\b", text_upper):
-        scores[DOC_TYPE_BUSINESS_CARD] += 6
-
-    # Evidence for government identity documents
+    # Determine independent detected type
     gov_types = [DOC_TYPE_PASSPORT, DOC_TYPE_VISA, DOC_TYPE_DRIVING_LICENSE, DOC_TYPE_PERMIT, DOC_TYPE_AADHAAR, DOC_TYPE_PAN]
     best_gov_type = max(gov_types, key=scores.get)
     max_gov_score = scores[best_gov_type]
     biz_score = scores[DOC_TYPE_BUSINESS_CARD]
 
-    # Evaluation against user_hint (if user claimed a specific type)
+    # Heuristic detection
+    detected_type = DOC_TYPE_UNKNOWN
+    is_non_identity = False
+
+    # Check for commercial business card: Requires strong commercial entity evidence
+    has_strong_commercial_evidence = (
+        len(matched_corp_tokens) >= 1 and
+        (len(matched_exec_titles) >= 1 or commercial_emails or commercial_urls or len(matched_corp_tokens) >= 2)
+    )
+
+    if max_gov_score >= 6 and max_gov_score >= biz_score:
+        detected_type = best_gov_type
+        is_non_identity = False
+    elif has_strong_commercial_evidence and max_gov_score < 6:
+        detected_type = DOC_TYPE_BUSINESS_CARD
+        is_non_identity = True
+    elif max_gov_score >= 3 and max_gov_score > biz_score:
+        detected_type = best_gov_type
+        is_non_identity = False
+    elif biz_score >= 8 and max_gov_score == 0:
+        detected_type = DOC_TYPE_BUSINESS_CARD
+        is_non_identity = True
+    elif max_gov_score > 0:
+        detected_type = best_gov_type
+        is_non_identity = False
+    else:
+        detected_type = DOC_TYPE_UNKNOWN
+        is_non_identity = True
+
+    # Claimed Type vs Detected Type evaluation
     claimed_type = user_hint if user_hint and user_hint != "AUTO" else None
     is_claimed_mismatch = False
-    is_non_identity = False
     mismatch_reason = None
-    detected_type = DOC_TYPE_UNKNOWN
+    uncertainty = False
 
-    # If text is unreadable or OCR engine is unavailable
-    if len(text.strip()) < 10:
+    # OCR Uncertainty Handling (sparse or degraded text)
+    if len(text.strip()) < 15:
         if mrz_data and mrz_data.get("valid_structure"):
-            return {
-                "detected_type": DOC_TYPE_PASSPORT,
-                "claimed_type": claimed_type or DOC_TYPE_PASSPORT,
-                "is_claimed_mismatch": False,
-                "is_non_identity": False,
-                "mismatch_reason": None,
-                "scores": scores
-            }
-        return {
-            "detected_type": claimed_type or DOC_TYPE_UNKNOWN,
-            "claimed_type": claimed_type,
-            "is_claimed_mismatch": False,
-            "is_non_identity": False if claimed_type else True,
-            "mismatch_reason": None,
-            "scores": scores
-        }
+            detected_type = DOC_TYPE_PASSPORT
+            is_non_identity = False
+        else:
+            uncertainty = True
+            detected_type = claimed_type or DOC_TYPE_UNKNOWN
+            is_non_identity = False if claimed_type in gov_types else True
 
+    # Anti-impersonation conformance check
     if claimed_type and claimed_type in gov_types:
         claimed_score = scores[claimed_type]
-        # Check if document has ANY credible evidence for the claimed type
-        has_claimed_evidence = claimed_score >= 3
-        if claimed_type == DOC_TYPE_AADHAAR and (re.search(r"\b[2-9]\d{3}\s\d{4}\s\d{4}\b", text) or any(k in text_upper for k in aadhaar_keywords)):
-            has_claimed_evidence = True
-        elif claimed_type == DOC_TYPE_PAN and (re.search(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b", text_upper) or any(k in text_upper for k in pan_keywords)):
-            has_claimed_evidence = True
-        elif claimed_type == DOC_TYPE_PASSPORT and (re.search(r"P<[A-Z0-9<]{30,}", text) or any(k in text_upper for k in passport_keywords)):
-            has_claimed_evidence = True
-        elif claimed_type == DOC_TYPE_VISA and (re.search(r"V<[A-Z0-9<]{30,}", text) or any(k in text_upper for k in visa_keywords)):
-            has_claimed_evidence = True
-        elif claimed_type == DOC_TYPE_DRIVING_LICENSE and any(k in text_upper for k in dl_keywords):
-            has_claimed_evidence = True
+        has_claimed_evidence = claimed_score >= 3 or len(evidence[claimed_type]) > 0
 
-        if has_claimed_evidence:
+        # Special check for Aadhaar: if official keywords or valid 12-digit number exist, retain Aadhaar
+        if claimed_type == DOC_TYPE_AADHAAR and (
+            any(k in text_upper for k in ["AADHAAR", "AADHAR", "UIDAI", "GOVERNMENT OF INDIA", "MERA AADHAAR"]) or
+            re.search(r"\b[2-9]\d{3}[-\s]\d{4}[-\s]\d{4}\b", text) or
+            has_gov_domain
+        ):
+            has_claimed_evidence = True
+            detected_type = DOC_TYPE_AADHAAR
+            is_non_identity = False
+
+        if not has_claimed_evidence:
+            if detected_type == DOC_TYPE_BUSINESS_CARD or has_strong_commercial_evidence:
+                is_claimed_mismatch = True
+                detected_type = DOC_TYPE_BUSINESS_CARD
+                is_non_identity = True
+                mismatch_reason = (
+                    f"Document Type Mismatch: Intake registered under '{claimed_type}', "
+                    f"but optical analysis confirmed a commercial Business Card "
+                    f"(detected: {', '.join(evidence[DOC_TYPE_BUSINESS_CARD][:3])}) "
+                    f"lacking all statutory {claimed_type} credentials, emblems, and checksums."
+                )
+            elif max_gov_score >= 6 and best_gov_type != claimed_type:
+                is_claimed_mismatch = True
+                detected_type = best_gov_type
+                is_non_identity = False
+                mismatch_reason = (
+                    f"Document Type Conflict: User selected '{claimed_type}', but document exhibits "
+                    f"institutional characteristics of '{detected_type}'."
+                )
+            elif uncertainty:
+                # Conservative: OCR uncertainty != confirmed fraud
+                is_claimed_mismatch = False
+                mismatch_reason = f"OCR text inconclusive; insufficient optical markers to verify {claimed_type}."
+            else:
+                is_claimed_mismatch = True
+                detected_type = DOC_TYPE_NON_IDENTITY
+                is_non_identity = True
+                mismatch_reason = (
+                    f"Invalid Identity Document: Presented media lacks statutory credentials for claimed '{claimed_type}'."
+                )
+        else:
+            # Confirmed match with claimed type
             detected_type = claimed_type
             is_claimed_mismatch = False
             is_non_identity = False
-        else:
-            # User claimed a government document, but there is ZERO evidence for it on document!
-            is_claimed_mismatch = True
-            if biz_score >= 3 or (max_gov_score < 3 and biz_score > 0):
-                detected_type = DOC_TYPE_BUSINESS_CARD
-                is_non_identity = True
-            elif max_gov_score >= 4:
-                detected_type = best_gov_type
-                is_non_identity = False
-            else:
-                detected_type = DOC_TYPE_NON_IDENTITY
-                is_non_identity = True
 
-            mismatch_reason = (
-                f"Severe Document Discrepancy: User registered intake under '{claimed_type}', "
-                f"but physical optical analysis confirmed a {detected_type.replace('_', ' ').title()} "
-                f"lacking all official statutory {claimed_type} credentials, emblems, and checksums."
-            )
-    else:
-        # Autonomous Auto-Detection
-        if max_gov_score >= 3 and max_gov_score >= biz_score:
-            detected_type = best_gov_type
-            is_non_identity = False
-        elif biz_score >= 3:
-            detected_type = DOC_TYPE_BUSINESS_CARD
-            is_non_identity = True
-        elif max_gov_score >= 2:
-            detected_type = best_gov_type
-            is_non_identity = False
-        else:
-            detected_type = DOC_TYPE_UNKNOWN
-            is_non_identity = True
+    # Heuristic confidence calculation
+    total_score = sum(scores.values())
+    heuristic_conf = min(95.0, max(20.0, float(max_gov_score if not is_non_identity else biz_score) * 4.5)) if total_score > 0 else 0.0
 
     return {
         "detected_type": detected_type,
@@ -410,7 +504,10 @@ def classify_document_evidence(text: str, user_hint: Optional[str] = None, mrz_d
         "is_claimed_mismatch": is_claimed_mismatch,
         "is_non_identity": is_non_identity,
         "mismatch_reason": mismatch_reason,
-        "scores": scores
+        "scores": scores,
+        "evidence": evidence,
+        "uncertainty": uncertainty,
+        "confidence": round(heuristic_conf, 1)
     }
 
 
@@ -659,18 +756,203 @@ def parse_permit_fields(text: str) -> Dict[str, Any]:
     return fields
 
 
+AADHAAR_STOPWORDS = {
+    # Institutional & Government keywords
+    "GOVERNMENT", "GOVT", "INDIA", "BHARAT", "SARKAR", "UNIQUE",
+    "IDENTIFICATION", "AUTHORITY", "UIDAI", "AADHAAR", "AADHAR",
+    "MERA", "MERI", "PEHCHAN", "ENROLMENT", "ENROLLMENT", "HELP",
+    "DOWNLOAD", "DATE", "ISSUE", "PRINT", "VALID", "ONLY", "THROUGH",
+    "MOBILE", "NUMBER", "VID", "HELP@UIDAI", "WWW", "HTTP", "HTTPS",
+    "COMMISSION", "MINISTRY", "DEPARTMENT", "DIRECTORATE", "RO", "REGIONAL",
+    # Field labels
+    "DOB", "DOS", "DO8", "YOB", "YEAR", "BIRTH", "GENDER", "SEX",
+    "MALE", "FEMALE", "TRANSGENDER", "PURUSH", "MAHILA",
+    "FATHER", "HUSBAND", "MOTHER", "WIFE", "SON", "DAUGHTER",
+    "NAME", "NAAM", "ADDRESS", "PATA", "SIGNATURE", "OFFICE", "RESIDENT",
+    # Address & location abbreviations and nouns
+    "ARPT", "PART", "APARTMENT", "APT", "FLAT", "FLOOR", "HOUSE", "HNO",
+    "H.NO", "BLOCK", "BLK", "SECTOR", "SEC", "PLOT", "ROAD", "RD",
+    "STREET", "ST", "LANE", "MARG", "NAGAR", "COLONY", "ENCLAVE",
+    "VIHAR", "POCKET", "PHASE", "DIST", "DISTRICT", "STATE", "PIN",
+    "PINCODE", "PO", "P.O", "PS", "P.S", "TEHSIL", "TALUK", "VILLAGE",
+    "CITY", "TOWN", "POST", "NEAR", "OPP", "BEHIND", "BESIDE", "FRONT",
+    "WEST", "EAST", "NORTH", "SOUTH", "BUILDING", "BLDG", "TOWER",
+    "COMPLEX", "PLAZA", "RESIDENCY", "SOCIETY", "ROOM", "WARD",
+    # Known noise tokens
+    "AWE", "WAA", "WRAEW", "FARARST", "HIHI", "HHH", "AXX", "AX", "AL", "ANA"
+}
+
+INDIAN_NAME_TOKENS = {
+    "KUMAR", "KUMARI", "SINGH", "SHARMA", "VERMA", "GUPTA", "DEVI", "KAUR",
+    "PATEL", "SHAH", "DAS", "ALI", "KHAN", "LAL", "PRASAD", "CHOWDHURY",
+    "RAO", "REDDY", "NAIR", "IYER", "JOSHI", "SEN", "ROY", "MALHOTRA",
+    "MEHTA", "BOSE", "JAIN", "BHATIA", "BHATTACHARYA", "CHOPRA", "MISHRA",
+    "PANDEY", "YADAV", "TIWARI", "SAXENA", "KAPOOR", "AGRAWAL", "AGARWAL",
+    "BANERJEE", "DUTTA", "CHATTERJEE", "MUKHERJEE", "GHOSH"
+}
+
+
+def _is_plausible_aadhaar_name(cand: str) -> bool:
+    """Validates that candidate is a plausible human name and not camera noise or address token."""
+    cand = cand.strip()
+    if len(cand) < 3 or len(cand) > 35:
+        return False
+
+    # Only alphabetic characters, spaces, and periods for initials allowed
+    if not re.match(r"^[A-Za-z][A-Za-z\s\.]+$", cand):
+        return False
+
+    words = cand.split()
+    if len(words) < 1 or len(words) > 4:
+        return False
+
+    for w in words:
+        w_clean = re.sub(r"[^A-Za-z]", "", w)
+        if not w_clean:
+            continue
+        w_up = w_clean.upper()
+
+        # Reject stopwords, address tokens, government terms
+        if w_up in AADHAAR_STOPWORDS:
+            return False
+
+        # Reject words with 3 identical consecutive characters
+        if re.search(r"(.)\1\1", w_clean.lower()):
+            return False
+
+        # If word length >= 2, must contain at least one vowel
+        if len(w_clean) >= 2 and not re.search(r"[aeiouyAEIOUY]", w_clean):
+            return False
+
+    return True
+
+
+def extract_aadhaar_name(text: str) -> Tuple[Optional[str], float]:
+    """
+    Extracts and ranks Aadhaar name candidates using multi-feature evidence:
+    - Prioritizes text located near/after name labels or pre-DOB positional regions
+    - Rejects address abbreviations (e.g. 'ARPT PART'), government headers, and OCR noise
+    - Evaluates linguistic structure (vowels, title case, standard suffixes)
+    - Returns (best_name, confidence_score) or ('Uncertain (Needs Review)', 0.0)
+      if confidence is insufficient.
+    """
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return "Uncertain (Needs Review)", 0.0
+
+    # Locate landmark line indices (DOB, Gender, 12-digit number)
+    dob_line_idx = None
+    gender_line_idx = None
+    for idx, l in enumerate(lines):
+        if re.search(r"(?:DOB|Date of Birth|Birth|Dos|DO8|\b\d{2}[/\-\.]\d{2}[/\-\.]\d{4}\b)", l, re.IGNORECASE):
+            if dob_line_idx is None:
+                dob_line_idx = idx
+        if re.search(r"\b(MALE|FEMALE|TRANSGENDER|PURUSH|MAHILA)\b", l, re.IGNORECASE):
+            if gender_line_idx is None:
+                gender_line_idx = idx
+
+    candidates_scored: List[Tuple[str, float]] = []
+
+    # Strategy 1: Explicit label match ("Name: <name>", "Naam: <name>", or "Name\n<name>")
+    for idx, l in enumerate(lines):
+        lbl_m = re.search(r"(?:Name|Naam)[\s:/=>]+([A-Za-z\s\.]{3,35})", l, re.IGNORECASE)
+        if lbl_m:
+            cand = lbl_m.group(1).strip()
+            if _is_plausible_aadhaar_name(cand):
+                candidates_scored.append((cand, 80.0))
+        elif re.match(r"^(?:Name|Naam)[\s:/=>]*$", l, re.IGNORECASE):
+            # Check next line
+            if idx + 1 < len(lines):
+                cand = lines[idx + 1].strip()
+                if _is_plausible_aadhaar_name(cand):
+                    candidates_scored.append((cand, 75.0))
+
+    # Strategy 2: Pre-DOB positional search (Standard UIDAI format: Name precedes DOB)
+    if dob_line_idx is not None:
+        # Check lines immediately preceding DOB
+        for offset, boost in [(1, 60.0), (2, 40.0), (3, 25.0)]:
+            target_idx = dob_line_idx - offset
+            if target_idx >= 0:
+                line_cand = lines[target_idx].strip()
+                clean_cand = re.sub(r"^[^A-Za-z]+", "", line_cand).strip()
+                if _is_plausible_aadhaar_name(clean_cand):
+                    candidates_scored.append((clean_cand, boost))
+
+    # Strategy 3: General scan across document lines before DOB
+    max_scan_idx = dob_line_idx if dob_line_idx is not None else len(lines)
+    for idx, l in enumerate(lines[:max_scan_idx]):
+        clean_cand = re.sub(r"^[^A-Za-z]+", "", l).strip()
+        if _is_plausible_aadhaar_name(clean_cand):
+            candidates_scored.append((clean_cand, 20.0))
+
+    if not candidates_scored:
+        return "Uncertain (Needs Review)", 0.0
+
+    # Aggregate and refine scores for each unique candidate
+    best_scores: Dict[str, float] = {}
+    for cand, initial_score in candidates_scored:
+        words = cand.split()
+        score = initial_score
+
+        # Multi-word bonus (Indian names almost always consist of 2-3 words)
+        if len(words) == 2:
+            score += 25.0
+        elif len(words) == 3:
+            score += 20.0
+        elif len(words) == 1:
+            score += 5.0
+
+        # Title Case bonus (e.g. "Ashna Kumari" vs "ASHNA KUMARI")
+        if cand.istitle():
+            score += 15.0
+        elif cand.isupper():
+            score += 10.0
+
+        # Standard Indian name tokens boost
+        if any(w.upper() in INDIAN_NAME_TOKENS for w in words):
+            score += 25.0
+
+        # Length plausibility
+        if 6 <= len(cand) <= 25:
+            score += 10.0
+
+        # Positional proximity to DOB if known
+        if dob_line_idx is not None:
+            cand_indices = [i for i, l in enumerate(lines) if cand in l]
+            if cand_indices:
+                dist = dob_line_idx - cand_indices[0]
+                if dist == 1:
+                    score += 30.0
+                elif dist == 2:
+                    score += 15.0
+                elif dist < 0:
+                    score -= 40.0  # Appears after DOB -> highly suspect
+
+        best_scores[cand] = max(best_scores.get(cand, 0.0), score)
+
+    # Sort candidates by final score descending
+    sorted_candidates = sorted(best_scores.items(), key=lambda x: x[1], reverse=True)
+    winner_name, winner_score = sorted_candidates[0]
+
+    # Sufficient confidence threshold
+    if winner_score >= 45.0:
+        return winner_name, round(winner_score, 1)
+    else:
+        return "Uncertain (Needs Review)", round(winner_score, 1)
+
+
 def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
     """Extracts Aadhaar fields (ID Number, Name, DOB, Gender)."""
     fields: Dict[str, Any] = {"id_number": None, "dob": None, "gender": None, "name": None}
 
-    # 1. 12-digit Aadhaar Number (standard 4 4 4 grouping or continuous)
-    id_match = re.search(r"\b([2-9]\d{3}\s\d{4}\s\d{4})\b", text)
+    # 1. 12-digit Aadhaar Number (standard 4 4 4 grouping with spaces or hyphens, or continuous)
+    id_match = re.search(r"\b([2-9]\d{3}[-\s]\d{4}[-\s]\d{4})\b", text)
     if id_match:
-        fields["id_number"] = id_match.group(1).strip()
+        fields["id_number"] = id_match.group(1).replace("-", " ").strip()
     else:
-        m12 = re.search(r"\b(\d{4}\s\d{4}\s\d{4})\b", text)
+        m12 = re.search(r"\b(\d{4}[-\s]\d{4}[-\s]\d{4})\b", text)
         if m12:
-            fields["id_number"] = m12.group(1).strip()
+            fields["id_number"] = m12.group(1).replace("-", " ").strip()
         else:
             m_cont = re.search(r"\b([2-9]\d{11})\b", text)
             if m_cont:
@@ -698,39 +980,9 @@ def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
     elif re.search(r"\b(TRANSGENDER)\b", text, re.IGNORECASE):
         fields["gender"] = "TRANSGENDER"
 
-    # 4. Name extraction
-    # Strategy A: Direct label match "Name: <name>" or "Name\n<name>"
-    nm_match = re.search(r"(?:Name|Naam)[\s:/=>]*\n?([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
-    if nm_match:
-        cand = nm_match.group(1).strip()
-        # Ensure candidate is not a common label or header
-        if not any(k in cand.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "MALE", "FEMALE", "UIDAI"]):
-            fields["name"] = cand
-
-    # Strategy B: Line inspection with symbol stripping
-    if not fields["name"]:
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
-        for i, line in enumerate(lines):
-            # Look for line containing 'Name' and inspect subsequent line
-            if re.search(r"\bName\b", line, re.IGNORECASE):
-                for next_l in lines[i+1:i+4]:
-                    cand = re.sub(r"^[^A-Za-z]+", "", next_l).strip()
-                    if cand and len(cand) >= 3 and not any(k in cand.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "GENDER", "MALE", "FEMALE", "UIDAI"]):
-                        if re.match(r"^[A-Za-z][A-Za-z ]{2,30}$", cand):
-                            fields["name"] = cand
-                            break
-                if fields["name"]:
-                    break
-
-    # Strategy C: First proper name before DOB/Gender
-    if not fields["name"]:
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
-        for line in lines:
-            clean_l = re.sub(r"^[^A-Za-z]+", "", line).strip()
-            if len(clean_l) > 3 and not any(k in clean_l.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "MALE", "FEMALE", "UIDAI", "AUTHORITY", "PEHCHAN"]):
-                if re.match(r"^[A-Za-z][A-Za-z ]{2,30}$", clean_l):
-                    fields["name"] = clean_l
-                    break
+    # 4. Name extraction via robust Aadhaar name evidence scoring
+    extracted_name, _ = extract_aadhaar_name(text)
+    fields["name"] = extracted_name
 
     return fields
 
@@ -854,6 +1106,26 @@ def parse_pan_fields(text: str) -> Dict[str, Any]:
     return fields
 
 
+def _has_structural_mrz_pattern(ocr_text: str) -> bool:
+    """
+    Verifies whether OCR text exhibits structural characteristics of an ICAO Doc 9303 MRZ zone:
+    - At least 2 candidate lines of >= 36 characters with multiple '<' fillers
+    - Starting with recognized ICAO type codes (P< for Passport, V< for Visa)
+    """
+    if not ocr_text:
+        return False
+    lines = [l.strip().replace(" ", "") for l in ocr_text.splitlines() if l.strip()]
+    candidate_lines = [l for l in lines if len(l) >= 36 and l.count("<") >= 2]
+    if len(candidate_lines) < 2:
+        return False
+    for i in range(len(candidate_lines) - 1):
+        l1 = candidate_lines[i]
+        l2 = candidate_lines[i + 1]
+        if (re.match(r"^P[A-Z0-9<]?<", l1) or re.match(r"^V[A-Z0-9<]?<", l1)) and len(l2) >= 36:
+            return True
+    return False
+
+
 def extract_document_fields(
     image_input,
     doc_type_hint: Optional[str] = None
@@ -861,16 +1133,59 @@ def extract_document_fields(
     """
     High-level OCR extraction orchestrator:
     1. Preprocesses image and runs multi-pass OCR
-    2. Scans for ICAO Doc 9303 MRZ lines
+    2. Applies safe OCR cleaning layer to remove obvious noise artifacts
     3. Identifies document type (or applies user hint)
-    4. Extracts structured identity/travel fields with robust fallbacks
-    5. Returns unified dictionary with full field coverage
+    4. Conditionally runs ICAO Doc 9303 MRZ parser ONLY for travel documents (Passport/Visa)
+       with structurally valid MRZ patterns
+    5. Extracts structured identity/travel fields with robust fallbacks
+    6. Returns unified dictionary with full field coverage
     """
     raw_text, conf = extract_text_and_data(image_input)
-    mrz_result = find_and_parse_mrz(raw_text)
+    cleaned_text = clean_ocr_text(raw_text)
 
-    # Determine document type & evidence
-    classification = classify_document_evidence(raw_text, user_hint=doc_type_hint, mrz_data=mrz_result)
+    NON_MRZ_TYPES = {
+        DOC_TYPE_AADHAAR,
+        DOC_TYPE_PAN,
+        DOC_TYPE_BUSINESS_CARD,
+        DOC_TYPE_DRIVING_LICENSE,
+        DOC_TYPE_PERMIT,
+        DOC_TYPE_NON_IDENTITY
+    }
+    MRZ_SUPPORTED_TYPES = {DOC_TYPE_PASSPORT, DOC_TYPE_VISA}
+
+    # Fast classification without MRZ data first
+    prelim_classification = classify_document_evidence(cleaned_text, user_hint=doc_type_hint, mrz_data=None)
+    detected_type = prelim_classification["detected_type"]
+    claimed_type = prelim_classification["claimed_type"]
+
+    # Strict rule: MRZ parsing requires a supported document type (PASSPORT/VISA)
+    # AND a structurally valid MRZ pattern.
+    # Documents claimed or detected as Aadhaar, PAN, Business Card, or DL NEVER invoke MRZ parsing.
+    # P< or V< OCR text alone CANNOT trigger MRZ parsing.
+    is_non_mrz_document = (
+        claimed_type in NON_MRZ_TYPES or
+        detected_type in NON_MRZ_TYPES
+    )
+
+    is_mrz_supported_doc = (
+        not is_non_mrz_document and
+        (claimed_type in MRZ_SUPPORTED_TYPES or detected_type in MRZ_SUPPORTED_TYPES)
+    )
+
+    has_valid_mrz_structure = (
+        _has_structural_mrz_pattern(cleaned_text) or _has_structural_mrz_pattern(raw_text)
+    )
+
+    mrz_result = None
+    if is_mrz_supported_doc and has_valid_mrz_structure:
+        mrz_result = find_and_parse_mrz(cleaned_text) or find_and_parse_mrz(raw_text)
+
+    # Re-evaluate classification with confirmed MRZ data if MRZ was supported and detected
+    if mrz_result and mrz_result.get("valid_structure"):
+        classification = classify_document_evidence(cleaned_text, user_hint=doc_type_hint, mrz_data=mrz_result)
+    else:
+        classification = prelim_classification
+
     detected_type = classification["detected_type"]
     claimed_type = classification["claimed_type"]
     is_claimed_mismatch = classification["is_claimed_mismatch"]
@@ -880,6 +1195,10 @@ def extract_document_fields(
     if mrz_result and mrz_result.get("valid_structure") and detected_type in [DOC_TYPE_UNKNOWN, DOC_TYPE_NON_IDENTITY]:
         detected_type = DOC_TYPE_PASSPORT
         is_non_identity = False
+
+    # Non-MRZ documents (Aadhaar, PAN, Business Card, DL) MUST NEVER carry MRZ data
+    if detected_type not in MRZ_SUPPORTED_TYPES:
+        mrz_result = None
 
     # Multi-orientation fallback: if document is UNKNOWN or NON_IDENTITY without clear card, test phone camera inversions
     if detected_type == DOC_TYPE_UNKNOWN:
@@ -900,15 +1219,25 @@ def extract_document_fields(
                     continue
                 if len(t_rot.strip()) < 20:
                     continue
-                m_rot = find_and_parse_mrz(t_rot)
-                c_rot = classify_document_evidence(t_rot, user_hint=doc_type_hint, mrz_data=m_rot)
+
+                clean_rot = clean_ocr_text(t_rot)
+                m_rot = None
+                if (
+                    claimed_type in MRZ_SUPPORTED_TYPES and
+                    claimed_type not in NON_MRZ_TYPES and
+                    _has_structural_mrz_pattern(clean_rot)
+                ):
+                    m_rot = find_and_parse_mrz(clean_rot) or find_and_parse_mrz(t_rot)
+
+                c_rot = classify_document_evidence(clean_rot, user_hint=doc_type_hint, mrz_data=m_rot)
                 dt_rot = c_rot["detected_type"]
                 if m_rot and m_rot.get("valid_structure") and dt_rot == DOC_TYPE_UNKNOWN:
                     dt_rot = DOC_TYPE_PASSPORT
                 if dt_rot != DOC_TYPE_UNKNOWN:
                     raw_text = t_rot
+                    cleaned_text = clean_rot
                     conf = 75.0
-                    mrz_result = m_rot
+                    mrz_result = m_rot if dt_rot in MRZ_SUPPORTED_TYPES else None
                     detected_type = dt_rot
                     claimed_type = c_rot["claimed_type"]
                     is_claimed_mismatch = c_rot["is_claimed_mismatch"]
@@ -919,17 +1248,17 @@ def extract_document_fields(
     fields: Dict[str, Any] = {}
 
     if detected_type == DOC_TYPE_PASSPORT:
-        fields = parse_passport_fields(raw_text, mrz_result)
+        fields = parse_passport_fields(cleaned_text, mrz_result)
     elif detected_type == DOC_TYPE_VISA:
-        fields = parse_visa_fields(raw_text)
+        fields = parse_visa_fields(cleaned_text)
     elif detected_type == DOC_TYPE_DRIVING_LICENSE:
-        fields = parse_driving_license_fields(raw_text)
+        fields = parse_driving_license_fields(cleaned_text)
     elif detected_type == DOC_TYPE_PERMIT:
-        fields = parse_permit_fields(raw_text)
+        fields = parse_permit_fields(cleaned_text)
     elif detected_type == DOC_TYPE_AADHAAR:
-        fields = parse_aadhaar_fields(raw_text)
+        fields = parse_aadhaar_fields(cleaned_text)
     elif detected_type == DOC_TYPE_PAN:
-        fields = parse_pan_fields(raw_text)
+        fields = parse_pan_fields(cleaned_text)
         # Targeted red-channel enhancement if PAN number was obscured by glare or waves
         if not fields.get("id_number"):
             try:
@@ -948,7 +1277,7 @@ def extract_document_fields(
                     for psm_mode in [6, 4, 11]:
                         t_extra = pytesseract.image_to_string(enhanced_red, config=f"--oem 3 --psm {psm_mode}")
                         if t_extra:
-                            f_extra = parse_pan_fields(t_extra)
+                            f_extra = parse_pan_fields(clean_ocr_text(t_extra))
                             if f_extra.get("id_number"):
                                 fields["id_number"] = f_extra["id_number"]
                             if not fields.get("name") and f_extra.get("name"):
@@ -957,22 +1286,24 @@ def extract_document_fields(
                                 fields["dob"] = f_extra["dob"]
                             if fields.get("id_number"):
                                 raw_text += "\n" + t_extra
+                                cleaned_text += "\n" + clean_ocr_text(t_extra)
                                 break
             except Exception:
                 pass
     elif detected_type == DOC_TYPE_BUSINESS_CARD:
-        fields = parse_business_card_fields(raw_text)
+        fields = parse_business_card_fields(cleaned_text)
     else:
         # Generic fallback
         fields = {
             "name": None,
             "id_number": None,
-            "raw_numbers": re.findall(r"\b[A-Z0-9]{6,16}\b", raw_text.upper()),
-            "dates": re.findall(r"\b\d{2}[/\-\.]\d{2}[/\-\.]\d{4}\b", raw_text)
+            "raw_numbers": re.findall(r"\b[A-Z0-9]{6,16}\b", cleaned_text.upper()),
+            "dates": re.findall(r"\b\d{2}[/\-\.]\d{2}[/\-\.]\d{4}\b", cleaned_text)
         }
 
     return {
         "raw_text": raw_text,
+        "cleaned_text": cleaned_text,
         "mean_confidence": conf,
         "ocr_confidence": conf,
         "confidence": conf,
@@ -982,6 +1313,9 @@ def extract_document_fields(
         "is_claimed_mismatch": is_claimed_mismatch,
         "is_non_identity": is_non_identity,
         "mismatch_reason": mismatch_reason,
+        "classification_evidence": classification.get("evidence", {}),
+        "uncertainty": classification.get("uncertainty", False),
+        "classification_scores": classification.get("scores", {}),
         "fields": fields,
         "mrz": mrz_result
     }

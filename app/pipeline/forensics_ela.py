@@ -73,12 +73,15 @@ def compute_ela(
 
 def generate_heatmap_and_anomalies(
     original_bgr: np.ndarray,
-    diff_gray: np.ndarray
+    diff_gray: np.ndarray,
+    qr_bbox: Optional[Tuple[int, int, int, int]] = None,
+    ignore_regions: Optional[List[Tuple[int, int, int, int]]] = None
 ) -> Tuple[np.ndarray, np.ndarray, List[Dict[str, int]], float]:
     """
     Generates a colorized forensic heatmap from ELA difference data.
     Detects localized clusters with anomalously high compression errors (spliced/tampered elements).
-    Excludes normal font anti-aliasing edge strokes and whole-card border frames.
+    Filters out legitimate high-frequency security features (QR codes, barcodes, official emblems)
+    to prevent false-positive tampering alerts on genuine identity credentials.
     """
     h, w = diff_gray.shape[:2]
     total_pixels = h * w
@@ -91,8 +94,6 @@ def generate_heatmap_and_anomalies(
     heatmap_bgr = cv2.applyColorMap(diff_amplified, cv2.COLORMAP_JET)
 
     # Regional 2D anomaly detection via local sliding window:
-    # A genuine document has low recompression error (< 1.0) across all regions.
-    # A spliced element (photo or pasted patch) exhibits sustained elevated error across a 2D block.
     local_mean = cv2.boxFilter(diff_gray.astype(np.float32), -1, (35, 35))
     anomaly_thresh_val = max(mean_diff * 3.0, 3.2)
     anomaly_mask = (local_mean >= anomaly_thresh_val).astype(np.uint8) * 255
@@ -110,6 +111,10 @@ def generate_heatmap_and_anomalies(
     min_area = total_pixels * 0.012  # ~1.2% of card area
     anomalous_pixels_count = 0
 
+    all_ignore = list(ignore_regions or [])
+    if qr_bbox:
+        all_ignore.append(qr_bbox)
+
     for cnt in contours:
         area = cv2.contourArea(cnt)
         if area > min_area:
@@ -121,6 +126,38 @@ def generate_heatmap_and_anomalies(
             aspect = cw / max(ch, 1)
             if aspect > 2.8 or ch < 35:
                 continue
+
+            # Check overlap with known ignore regions (e.g. decoded QR code bounding box)
+            is_ignored = False
+            for (ix, iy, iw, ih) in all_ignore:
+                overlap_x = max(0, min(x + cw, ix + iw) - max(x, ix))
+                overlap_y = max(0, min(y + ch, iy + ih) - max(y, iy))
+                overlap_area = overlap_x * overlap_y
+                if overlap_area > 0.20 * (cw * ch) or overlap_area > 0.20 * (iw * ih):
+                    is_ignored = True
+                    break
+            if is_ignored:
+                continue
+
+            # Heuristic filter: Legitimate QR code / 2D matrix barcode
+            # Characterized by roughly square aspect ratio and high spatial edge transitions
+            if 0.75 <= aspect <= 1.35 and cw < w * 0.45 and ch < h * 0.60:
+                roi_bgr = original_bgr[y:y+ch, x:x+cw]
+                roi_gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY) if len(roi_bgr.shape) == 3 else roi_bgr
+                edges = cv2.Canny(roi_gray, 50, 150)
+                edge_density = float(np.count_nonzero(edges)) / float(max(1, cw * ch))
+                if edge_density > 0.13:
+                    # Legitimate high-density matrix barcode / QR code; skip anomaly flag
+                    continue
+
+            # Heuristic filter: Official top emblems / heraldic seals (top 22% of document)
+            if y < h * 0.22 and cw < w * 0.25 and ch < h * 0.25:
+                roi_bgr = original_bgr[y:y+ch, x:x+cw]
+                roi_gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY) if len(roi_bgr.shape) == 3 else roi_bgr
+                std_contrast = float(np.std(roi_gray))
+                if std_contrast > 40:
+                    # Official high-contrast emblem linework
+                    continue
 
             reg_mean = float(np.mean(diff_gray[y:y+ch, x:x+cw]))
             if reg_mean >= 3.0:
@@ -207,8 +244,9 @@ def analyze_photo_splice(
     """
     Compares the ELA recompression error rate & high-frequency noise variance
     inside the facial portrait region against the surrounding card substrate.
-    If the face region has significantly higher/lower compression error or incompatible
-    sensor noise, it indicates a digital photo replacement splice.
+    Accounts for portrait saturation and contrast to avoid false positives on
+    desaturated or low-contrast printed ID photographs.
+    A photo splice requires multiple corroborating forensic indicators.
     """
     if not face_bbox:
         return False, 0.0, "No face bounding box provided for splice audit."
@@ -245,24 +283,60 @@ def analyze_photo_splice(
         bg_mean = float(np.mean(diff_gray[bg_mask]))
 
     ratio = face_mean / max(0.1, bg_mean)
-    # A genuine digital splice shows distinct localized compression divergence
-    is_spliced = (ratio > 2.85 and face_mean > 3.0) or (ratio < 0.25 and bg_mean > 4.5)
 
-    # Check high-frequency noise disparity if cv_img is supplied
+    # Portrait image quality & context evaluation
+    is_desaturated = False
+    is_low_contrast = False
     noise_ratio = 1.0
+    seam_discontinuity = False
+
     if cv_img is not None:
         try:
-            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY).astype(np.float32)
-            blur = cv2.GaussianBlur(gray, (5, 5), 0)
-            noise = np.abs(gray - blur)
+            face_roi = cv_img[y:y+h, x:x+w]
+            if len(face_roi.shape) == 3:
+                hsv = cv2.cvtColor(face_roi, cv2.COLOR_BGR2HSV)
+                mean_sat = float(np.mean(hsv[:, :, 1]))
+                is_desaturated = (mean_sat < 35.0)
+
+            gray_face = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY) if len(face_roi.shape) == 3 else face_roi
+            contrast = float(np.std(gray_face))
+            is_low_contrast = (contrast < 28.0)
+
+            # High-frequency noise profile
+            gray_all = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY) if len(cv_img.shape) == 3 else cv_img.astype(np.float32)
+            blur = cv2.GaussianBlur(gray_all.astype(np.float32), (5, 5), 0)
+            noise = np.abs(gray_all.astype(np.float32) - blur)
             face_noise = float(np.mean(noise[y:y+h, x:x+w]))
             ref_mask = local_bg_mask if np.any(local_bg_mask) else bg_mask
             bg_noise = float(np.mean(noise[ref_mask]))
             noise_ratio = face_noise / max(0.1, bg_noise)
-            if (noise_ratio > 3.2 or noise_ratio < 0.25) and face_mean > 2.5:
-                is_spliced = True
+
+            # Check for rectangular pasted boundary seam gradient
+            top_seam = float(np.mean(diff_gray[max(0, y-2):min(h_img, y+2), x:x+w]))
+            bottom_seam = float(np.mean(diff_gray[max(0, y+h-2):min(h_img, y+h+2), x:x+w]))
+            seam_discontinuity = (max(top_seam, bottom_seam) > max(face_mean, bg_mean) * 2.2 and max(top_seam, bottom_seam) > 4.0)
         except Exception:
             pass
+
+    # Corroborating indicator model:
+    c_indicator = False
+    if ratio > 3.2 and face_mean > 3.2:
+        c_indicator = True
+    elif ratio < 0.20 and bg_mean > 5.5 and not is_desaturated and not is_low_contrast:
+        c_indicator = True
+
+    n_indicator = (noise_ratio > 3.5 or (noise_ratio < 0.22 and not is_desaturated))
+    s_indicator = seam_discontinuity
+
+    # Decision rule: Photo splice confirmed only when multiple indicators corroborate
+    if ratio > 4.5 and face_mean > 4.5:
+        is_spliced = True
+    elif c_indicator and (n_indicator or s_indicator):
+        is_spliced = True
+    elif n_indicator and s_indicator and face_mean > 2.5:
+        is_spliced = True
+    else:
+        is_spliced = False
 
     explanation = (
         f"Photo replacement splice detected: Portrait compression ratio ({round(ratio, 2)}x) "
@@ -276,7 +350,8 @@ def analyze_photo_splice(
 def run_ela_forensic_analysis(
     image_input,
     face_bbox: Optional[Tuple[int, int, int, int]] = None,
-    doc_type: str = "UNKNOWN"
+    doc_type: str = "UNKNOWN",
+    qr_bbox: Optional[Tuple[int, int, int, int]] = None
 ) -> Dict[str, Any]:
     """
     Unified forensic screening pipeline:
@@ -295,7 +370,9 @@ def run_ela_forensic_analysis(
         raise ValueError("Unsupported image type for ELA analysis")
 
     ela_img, diff_gray, mean_diff, max_diff = compute_ela(cv_img)
-    heatmap_bgr, overlay_bgr, anomalies, tamper_pct = generate_heatmap_and_anomalies(cv_img, diff_gray)
+    heatmap_bgr, overlay_bgr, anomalies, tamper_pct = generate_heatmap_and_anomalies(
+        cv_img, diff_gray, qr_bbox=qr_bbox
+    )
 
     # Photo splice check
     photo_spliced, splice_ratio, splice_expl = analyze_photo_splice(diff_gray, cv_img=cv_img, face_bbox=face_bbox)
