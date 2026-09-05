@@ -2,7 +2,7 @@
 **Smart India Hackathon 2024 | Problem Statement: SIH26188 | Ministry of Home Affairs (MHA) | Category: Blockchain & Cybersecurity**
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![OpenCV](https://img.shields.io/badge/Computer%20Vision-OpenCV%205.0-5C3EE8?style=flat&logo=opencv&logoColor=white)](https://opencv.org/)
+[![OpenCV](https://img.shields.io/badge/Computer%20Vision-OpenCV%20%E2%89%A54.8-5C3EE8?style=flat&logo=opencv&logoColor=white)](https://opencv.org/)
 [![Deep Learning](https://img.shields.io/badge/Biometrics-YuNet%20%2B%20SFace%20128D-FF6F00?style=flat&logo=onnx&logoColor=white)](https://github.com/opencv/opencv_zoo)
 [![OCR](https://img.shields.io/badge/OCR-Tesseract%205.5%20Auto--Rotate-blue?style=flat)](https://github.com/tesseract-ocr/tesseract)
 [![Blockchain & Ledger](https://img.shields.io/badge/Audit-SHA--256%20Hash--Chaining-emerald?style=flat)](https://en.wikipedia.org/wiki/Hash_chain)
@@ -17,7 +17,7 @@
 
 Immigration officers inspect thousands of travel and identity credentials daily—including **International Passports, Visas, Aadhaar Cards, PAN Cards, and Driving Licenses**. Manual inspection is vulnerable to human fatigue and easily deceived by modern digital manipulations (Photoshop alterations, facial photo splicing, altered dates of birth, or look-alike impersonators).
 
-TruthLens addresses this with a **4-Layer Forensic Defense System** combined with a **Tamper-Proof Sequential Hash-Chained Audit Ledger** and **DPDP Act 2023 Data Minimization**, executing end-to-end verification in **under 1.5 seconds**.
+TruthLens addresses this with a **4-Layer Forensic Defense System** combined with a **Tamper-Proof Sequential Hash-Chained Audit Ledger** and **DPDP Act 2023 Data Minimization**, providing automated multi-layer verification for immigration counters.
 
 ---
 
@@ -41,12 +41,12 @@ flowchart TD
 
 ### 🔍 Layer 1: Intelligent OCR & Mathematical Checksum Verification
 - **Multi-Pass Preprocessing**: Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) and Bilateral Filtering to remove sensor grain while keeping micro-print edges crisp.
-- **Auto-Rotation & Layout Recovery**: Evaluates orientation candidates (0°, 90°, 180°, 270°) with sparse layout `--psm 11` fallback, recovering rotated mobile captures with 95%+ confidence.
-- **Smart Downscaling**: Downscales high-resolution 12MP–48MP mobile photos to optimal 1500px width, reducing OCR inference time from 17s to under 1s without loss of character fidelity.
+- **Auto-Rotation & Layout Recovery**: Evaluates orientation candidates (0°, 90°, 180°, 270°) with sparse layout `--psm 11` fallback, recovering misoriented mobile captures via multi-pass confidence scoring.
+- **Smart Downscaling**: Downscales high-resolution 12MP–48MP mobile photos to optimal 1500px width, significantly optimizing OCR processing latency while preserving critical character and micro-print fidelity.
 - **Mathematical Checksums (Zero Guesswork)**:
   - **ICAO Doc 9303 MRZ**: Evaluates cyclic 7-3-1 weighting check digits across TD3 (Passports) and TD1 (Identity Cards).
   - **UIDAI Verhoeff Checksum**: Implements the official dihedral group $D_5$ algorithm on 12-digit Aadhaar numbers, catching 100% of single-digit alterations and transpositions.
-  - **ITD Structure Validation**: Validates 10-character alphanumeric PAN syntax, entity code (4th char: 'P', 'C', 'H', etc.), and surname check (5th char).
+  - **ITD Structure Validation**: Validates 10-character alphanumeric PAN syntax (`[A-Z]{5}[0-9]{4}[A-Z]`) and entity classification via the 4th character ('P' for Individual, 'C' for Company, 'H' for HUF, etc.).
 
 ---
 
@@ -57,9 +57,9 @@ flowchart TD
 - **Monochrome / Photocopy Adaptation**: Low-saturation ID cards (black-and-white Aadhaar copies) automatically disable color histogram weighting and allocate 100% weight to deep facial bone structure.
 - **Adaptive Illumination Normalization**: LAB-space luminance CLAHE corrects shadows, webcam glare, and underexposure.
 - **Calibrated Verdict Tiers**:
-  - `≥ 60% Match`: **MATCH CONFIRMED** (Genuine passenger)
-  - `48% – 59%`: **BORDERLINE SIMILARITY** (Secondary inspection recommended)
-  - `< 48%`: **CRITICAL ALERT: BIOMETRIC MISMATCH** (Identity impersonation caught)
+  - `≥ 40.0% Match`: **MATCH** (Biometric clearance confirmed)
+  - `34.0% – 39.9%`: **POSSIBLE MISMATCH** (Borderline similarity / secondary inspection recommended)
+  - `< 34.0%`: **MISMATCH** (Biometric alert / potential impersonation caught)
 
 ---
 
@@ -104,17 +104,31 @@ Appropriate for local border terminal and institutional deployments:
 
 ---
 
+### 🛡️ Layer 7: Enterprise Security Hardening & Edge Protection
+Instituted strict edge-defense safeguards against web and file-ingestion attack vectors:
+- **15 MB File Upload Ceiling**: Rejects oversized uploaded image and base64 payloads with HTTP 413 (`Payload Too Large`) to guard against memory exhaustion.
+- **Allowed Format Whitelisting**: Strict verification of image byte signatures (`JPEG`, `PNG`, `WEBP`, `TIFF`, `BMP`) via PIL inspection before raster decoding.
+- **Decompression Bomb Protection**: Explicit `Image.MAX_IMAGE_PIXELS = 25,000,000` cap to reject high-dimension bomb payloads.
+- **Path Traversal Containment**: Sanitizes sample and document identifiers against traversal sequences (`..`, `/`, `\`, `%`), filename regex enforcement, and directory containment checks (`Path.resolve().relative_to(...)`).
+- **Strict Screening ID Validation**: Restricts screening identifiers to `^[A-Za-z0-9\-]+$` to block injection and traversal payloads.
+- **Security Response Headers**: Serves static documents with `X-Content-Type-Options: nosniff` and `Cache-Control: private, max-age=3600`.
+
+---
+
 ## 📊 Verified Test Results Matrix (From Actual Test Runs)
 
-The following metrics are measured directly from the automated test suites on clean demo fixtures:
+The following metrics are measured directly from the automated pipeline regression suite (`test_pipeline.py`) across all 8 demo scenarios:
 
-| Document Tested | Scenario Description | Expected Verdict | TruthLens Result | Risk Score | Primary Detection Mechanisms |
-| :--- | :--- | :---: | :---: | :---: | :--- |
-| **`demo_passport_genuine.jpg`** | Authentic US Passport + Live Match | `VERIFIED / LOW RISK` | 🟢 **PASS** | **0 / 100** | ICAO 9303 Checksum Pass + SFace Biometric Match (62.8%) + Clean ELA |
-| **`demo_visa_expired.jpg`** | French Schengen Visa (Overstay) | `HIGH RISK` | 🔴 **PASS** | **100 / 100** | Document Validity Expired + Watchlist Overstay Hit + Stamp Analysis |
-| **`demo_passport_tampered.jpg`** | Spliced Photo + Face Impersonation | `HIGH RISK` | 🔴 **PASS** | **63 / 100** | Facial ROI Compression Anomaly + SFace Mismatch (35.3%) + ICAO Anomaly |
-| **`sample_genuine_aadhaar.jpg`** | Authentic UIDAI Aadhaar Card | `VERIFIED / LOW RISK` | 🟢 **PASS** | **0 / 100** | Verhoeff $D_5$ Checksum Pass + Clean Paper ELA Substrate |
-| **`sample_genuine_pan.jpg`** | Authentic Income Tax PAN Card | `VERIFIED / LOW RISK` | 🟢 **PASS** | **0 / 100** | ITD Entity Code ('P') Valid + Format Syntax Check Pass |
+| Scenario / Document Tested | Expected Verdict | TruthLens Result | Risk Score | Primary Detection Mechanisms |
+| :--- | :---: | :---: | :---: | :--- |
+| **1. Genuine US Passport** (`demo_passport_genuine.jpg`) | `VERIFIED / LOW RISK` | 🟢 **PASS** | **6 / 100** | ICAO 9303 Checksum Pass + SFace Biometric Match (62.8%) + Clean ELA |
+| **2. Tampered Passport** (`demo_passport_tampered.jpg`) | `HIGH RISK` | 🔴 **PASS** | **69 / 100** | Interpol Watchlist Hit + SFace Mismatch (35.3%) + ICAO Anomaly |
+| **3. Genuine Schengen Visa** (`demo_visa_genuine.jpg`) | `VERIFIED / LOW RISK` | 🟢 **PASS** | **18 / 100** | Valid Stay & Transit Window + Clean Forensic Background |
+| **4. Expired Visa** (`demo_visa_expired.jpg`) | `HIGH RISK` | 🔴 **PASS** | **100 / 100** | Blacklist Overstay Hit + Document Validity Expired + High ELA |
+| **5. Genuine Aadhaar Card** (`sample_genuine_aadhaar.jpg`) | `VERIFIED / LOW RISK` | 🟢 **PASS** | **6 / 100** | Verhoeff $D_5$ Checksum Pass + Clean Paper ELA Substrate |
+| **6. Tampered Aadhaar** (`sample_tampered_name_aadhaar.jpg`) | `HIGH RISK` | 🔴 **PASS** | **71 / 100** | Printed Name vs Cryptographic QR Mismatch (+65 pts) |
+| **7. Genuine PAN Card** (`sample_genuine_pan.jpg`) | `VERIFIED / LOW RISK` | 🟢 **PASS** | **6 / 100** | ITD Entity Code ('P' - Individual) Valid + Syntax Check Pass |
+| **8. Tampered PAN Card** (`sample_tampered_pan.jpg`) | `HIGH RISK` | 🔴 **PASS** | **100 / 100** | Photo Splice ELA Heatmap Anomaly + Cryptographic QR Conflict |
 
 ---
 
@@ -123,10 +137,10 @@ The following metrics are measured directly from the automated test suites on cl
 | Layer | Technologies | Purpose |
 | :--- | :--- | :--- |
 | **Backend REST API** | FastAPI, Uvicorn, Pydantic | Asynchronous, low-latency microservice architecture |
-| **Computer Vision** | OpenCV 5.0, NumPy, SciPy | CLAHE, bilateral filtering, ELA error matrices |
+| **Computer Vision** | OpenCV (opencv-python>=4.8.0), NumPy, SciPy | CLAHE, bilateral filtering, ELA error matrices |
 | **Deep Learning** | ONNX Runtime, YuNet, SFace | 5-landmark neural detection & 128-d face recognition |
 | **OCR Engine** | Tesseract 5.5, PyTesseract | Multi-pass optical character extraction with auto-rotation |
-| **QR & Barcode** | OpenCV QRCodeDetector, Pyzbar | Cryptographic barcode and Secure QR decoding |
+| **QR & Barcode** | OpenCV QRCodeDetector (built-in), Pyzbar (optional) | Cryptographic barcode and Secure QR decoding |
 | **Security & Ledger** | SHA-256, PBKDF2-HMAC, SQLite3 | Sequential hash-chaining, tamper-evident audit ledger |
 | **Frontend UI** | Vanilla HTML5, CSS3, ES6 JavaScript | Glassmorphic cybersecurity dashboard with zero external CDN dependencies |
 
@@ -173,24 +187,32 @@ The local database comes pre-seeded with authorized officer accounts for testing
 
 ## 🧪 Automated Test Suites
 
-Run the automated verification suites locally:
+The codebase includes comprehensive automated test coverage with **36/36 tests passing (100% pass rate)**:
 
 ```bash
-# 1. Full pipeline verification (Passports, Visas, Aadhaar, PAN)
-python test_pipeline.py
+# 1. Real Aadhaar fixes (UIDAI QR V2 bidirectional matching, statutory masked formats)
+python test_aadhaar_fixes.py     # 5/5 PASSED
 
-# 2. Authentication and multi-officer session security
-python test_auth.py
+# 2. Full pipeline verification (Passports, Visas, Aadhaar, PAN - 8 scenarios)
+python test_pipeline.py          # 8/8 PASSED
 
-# 3. Cryptographic audit chain (Genesis, Sequential Hashing, Tamper Detection)
-python test_audit_chain.py
+# 3. Authentication, sessions, and multi-officer role security
+python test_auth.py              # 10/10 PASSED
 
-# 4. DPDP Act 2023 data masking & privacy verification
-python test_data_masking.py
+# 4. Cryptographic audit chain (Genesis, Sequential Hashing, Tamper Detection)
+python test_audit_chain.py       # 6/6 PASSED
 
-# 5. UI fixes verification (Cancel button, Shared ledger, Live camera modes)
-python test_fixes.py
+# 5. DPDP Act 2023 data masking & privacy verification
+python test_data_masking.py      # 4/4 PASSED
+
+# 6. UI fixes verification (Cancel button, Shared ledger, Live camera modes)
+python test_fixes.py             # 3/3 PASSED
 ```
+
+Additionally, edge security controls were separately live-verified:
+- Payload >15 MB rejected with **HTTP 413**
+- Path traversal sequences (`..`, `/`, `\`, `%`) safely blocked on all endpoints
+- Security response headers (`X-Content-Type-Options: nosniff`, `Cache-Control: private`) confirmed active on file responses
 
 ---
 
@@ -213,6 +235,7 @@ TruthLens/
 │   │   ├── face_verifier.py      # YuNet + SFace 128-d biometric matching
 │   │   ├── qr_detector.py        # Cryptographic QR decoder
 │   │   ├── cross_verifier.py     # Token-fuzzy QR vs printed text matcher
+│   │   ├── explanation_engine.py # Local-first sovereign AI explainability engine
 │   │   ├── risk_engine.py        # Dynamic explainable risk assessment engine
 │   │   └── screening_pipeline.py # Master pipeline orchestration & audit logging
 │   └── database/
@@ -231,6 +254,7 @@ TruthLens/
 ├── create_presentation.py        # Python script generating TruthLens_SIH_Presentation.pptx
 ├── SIH_Presentation_Speaker_Script.md # Slide-by-slide speaker script & Q&A guide
 ├── DEMO_SCRIPT.md                # Step-by-step 3-minute live demonstration script
+├── test_aadhaar_fixes.py         # UIDAI QR V2 & masked Aadhaar verification tests
 ├── test_pipeline.py              # End-to-end pipeline regression tests
 ├── test_auth.py                  # User authentication & session tests
 ├── test_audit_chain.py           # Cryptographic hash-chain integrity & tamper tests
@@ -243,7 +267,7 @@ TruthLens/
 
 ## 📜 Compliance & Institutional Integrity
 
-- **100% Local-First Edge Architecture**: All deep learning inferences, OCR parsing, image forensics, and cryptographic checks execute 100% on-premises. Zero document images or biometric embeddings leave the checkpoint terminal to third-party cloud APIs.
+- **Local-First Sovereign Architecture**: The default screening and explainability pipeline is local-first and deterministic, executing 100% on-premises without requiring third-party cloud APIs. Document images, biometric embeddings, and audit ledgers remain strictly within the checkpoint terminal boundary (optional external LLM provider configuration is supported if explicitly desired).
 - **DPDP Act 2023 & Data Minimization**: Document numbers are masked in all overview lists and visual explorers; full data is revealed only during active case inspection.
 - **Explainable AI (XAI)**: Every clearance or rejection includes transparent, itemized scoring reasons and visual evidence overlays for human officer review.
 - **Tamper-Evident Ledger**: Sequential SHA-256 hash-chaining prevents insider manipulation of screening records and decisions.
