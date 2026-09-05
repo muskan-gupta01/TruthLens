@@ -469,6 +469,161 @@ def make_sample_business_card():
     print(f"Generated: {out_path.name}")
 
 
+def make_genuine_visa():
+    """Generates an authentic Genuine Tourist Visa (Elena Rostova, V3841029)."""
+    w, h = 850, 550
+    img = Image.new("RGB", (w, h), (248, 252, 248))
+    draw = ImageDraw.Draw(img)
+
+    # Header
+    draw.rectangle([0, 0, w, 75], fill=(22, 60, 110))
+    f_hdr = get_font(24, bold=True)
+    draw.text((30, 15), "SCHENGEN / ENTRY VISA", fill=(255, 255, 255), font=f_hdr)
+    draw.text((30, 48), "ETAT FRANCAIS / REPUBLIC OF FRANCE", fill=(210, 230, 255), font=get_font(12, bold=True))
+
+    f_lbl = get_font(12, bold=True)
+    f_val = get_font(16, bold=True)
+
+    draw.text((600, 18), "Visa Number", fill=(210, 230, 255), font=f_lbl)
+    draw.text((600, 34), "V3841029", fill=(255, 225, 90), font=f_val)
+
+    # Clean portrait (Right)
+    avatar = create_mock_avatar(160, 205, seed_color=(220, 170, 135), hair_color=(50, 30, 20), shirt_color=(35, 75, 125))
+    img.paste(avatar, (640, 110))
+
+    fields = [
+        ("Valid For", "SCHENGEN STATES", (40, 105)),
+        ("Type of Visa", "C (TOURIST)", (320, 105)),
+        ("Valid From", "10/01/2026", (40, 165)),
+        ("Valid Until", "15/01/2027", (320, 165)),
+        ("Number of Entries", "MULT", (40, 225)),
+        ("Duration of Stay", "90 DAYS", (320, 225)),
+        ("Bearer / Name", "ELENA ROSTOVA", (40, 285)),
+        ("Remarks", "TOURIST TRANSIT - STANDARD ENTRY", (40, 345))
+    ]
+
+    for lbl, val, pos in fields:
+        draw.text((pos[0], pos[1]), lbl, fill=(80, 95, 115), font=f_lbl)
+        draw.text((pos[0], pos[1] + 16), val, fill=(15, 30, 55), font=f_val)
+
+    # Valid Entry Stamp (Green border seal)
+    draw.ellipse([460, 250, 590, 380], outline=(30, 125, 65), width=3)
+    draw.ellipse([475, 265, 575, 365], outline=(30, 125, 65), width=1)
+    draw.text((490, 300), "IMMIGRATION", fill=(30, 125, 65), font=get_font(11, bold=True))
+    draw.text((505, 320), "PARIS CDG", fill=(30, 125, 65), font=get_font(10, bold=True))
+
+    # MRZ lines
+    draw.rectangle([0, 450, w, h], fill=(255, 255, 255))
+    draw.line([(0, 450), (w, 450)], fill=(200, 215, 230), width=2)
+    f_mrz = get_ocr_mrz_font(20)
+    draw.text((35, 470), "V<FRAROSTOVA<<ELENA<<<<<<<<<<<<<<<<<<<<<<<<<", fill=(20, 25, 35), font=f_mrz)
+    draw.text((35, 505), "V3841029<4FRA9204158F2701155<<<<<<<<<<<<<<00", fill=(20, 25, 35), font=f_mrz)
+
+    draw.rectangle([0, 0, w - 1, h - 1], outline=(22, 60, 110), width=3)
+    out_path = SAMPLE_DOCS_DIR / "demo_visa_genuine.jpg"
+    img.save(out_path, quality=94)
+    print(f"Generated: {out_path.name}")
+
+
+def make_tampered_aadhaar():
+    """Generates tampered Aadhaar mock card with altered printed name and spliced photo."""
+    w, h = 860, 520
+    img = Image.new("RGB", (w, h), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    # Top Tri-color bar
+    draw.rectangle([0, 0, w, 12], fill=(255, 120, 0))
+    draw.rectangle([0, 12, w, 24], fill=(255, 255, 255))
+    draw.rectangle([0, 24, w, 36], fill=(18, 136, 7))
+
+    f_govt = get_font(18, bold=True)
+    draw.text((160, 48), "GOVERNMENT OF INDIA", fill=(0, 0, 0), font=f_govt)
+    draw.text((160, 74), "Unique Identification Authority of India", fill=(70, 70, 70), font=get_font(13))
+
+    # SPLICED AVATAR: Different person & heavily re-compressed to trigger ELA
+    spliced_avatar = create_mock_avatar(175, 225, seed_color=(165, 110, 80), hair_color=(15, 15, 15), shirt_color=(90, 35, 35))
+    buf = io.BytesIO()
+    spliced_avatar.save(buf, format="JPEG", quality=35)
+    buf.seek(0)
+    recompressed = Image.open(buf)
+    img.paste(recompressed, (45, 120))
+
+    f_lbl = get_font(13, bold=True)
+    f_val = get_font(15)
+
+    # Altered printed name: Vikram Mehta (contradicts QR payload 'Aakash Verma')
+    draw.text((250, 135), "Name:", fill=(80, 80, 80), font=f_lbl)
+    draw.text((340, 135), "Vikram Mehta", fill=(0, 0, 0), font=f_val)
+    draw.text((250, 175), "DOB:", fill=(80, 80, 80), font=f_lbl)
+    draw.text((340, 175), "12/05/1992", fill=(0, 0, 0), font=f_val)
+    draw.text((250, 215), "Gender:", fill=(80, 80, 80), font=f_lbl)
+    draw.text((340, 215), "MALE", fill=(0, 0, 0), font=f_val)
+
+    aadhaar_base = "45289134567"
+    chk_digit = generate_verhoeff_check_digit(aadhaar_base)
+    full_aadhaar = f"{aadhaar_base[:4]} {aadhaar_base[4:8]} {aadhaar_base[8:]}{chk_digit}"
+
+    f_id = get_font(25, bold=True)
+    draw.text((250, 280), full_aadhaar, fill=(180, 20, 20), font=f_id)
+
+    # Authentic cryptographic QR containing genuine identity (Aakash Verma)
+    qr_payload = f'<?xml version="1.0"?><PrintLetterBarcodeData uid="{aadhaar_base}{chk_digit}" name="Aakash Verma" gender="M" yob="1992" dob="12/05/1992" />'
+    qr_img = generate_qr_image(qr_payload, 180)
+    img.paste(qr_img, (620, 120))
+
+    # Bottom bar
+    draw.rectangle([0, h - 35, w, h], fill=(180, 20, 20))
+    draw.text((320, h - 28), "Mera Aadhaar, Meri Pehchan", fill=(255, 255, 255), font=get_font(14, bold=True))
+    draw.rectangle([0, 0, w - 1, h - 1], outline=(180, 180, 180), width=2)
+
+    out_path = SAMPLE_DOCS_DIR / "sample_tampered_name_aadhaar.jpg"
+    img.save(out_path, quality=94)
+    print(f"Generated: {out_path.name}")
+
+
+def make_tampered_pan():
+    """Generates tampered PAN card with spliced photo, altered name, and QR mismatch."""
+    w, h = 860, 540
+    img = Image.new("RGB", (w, h), (235, 245, 255))
+    draw = ImageDraw.Draw(img)
+
+    draw.rectangle([0, 0, w, 70], fill=(28, 70, 135))
+    draw.text((180, 15), "INCOME TAX DEPARTMENT", fill=(255, 255, 255), font=get_font(20, bold=True))
+    draw.text((180, 42), "GOVT. OF INDIA", fill=(220, 235, 255), font=get_font(14))
+
+    # SPLICED AVATAR: Different person & heavily re-compressed to trigger ELA
+    spliced_avatar = create_mock_avatar(160, 210, seed_color=(170, 115, 85), hair_color=(20, 20, 20), shirt_color=(95, 40, 40))
+    buf = io.BytesIO()
+    spliced_avatar.save(buf, format="JPEG", quality=35)
+    buf.seek(0)
+    recompressed = Image.open(buf)
+    img.paste(recompressed, (45, 115))
+
+    f_lbl = get_font(12, bold=True)
+    f_val = get_font(15, bold=True)
+
+    draw.text((240, 110), "Permanent Account Number", fill=(70, 90, 120), font=f_lbl)
+    # ABCPS9999F is flagged as cancelled duplicate in mock_watchlists
+    draw.text((240, 130), "ABCPS9999F", fill=(15, 30, 60), font=get_font(22, bold=True))
+    draw.text((240, 180), "Name", fill=(70, 90, 120), font=f_lbl)
+    # Altered name VIKRAM MEHTA contradicts QR payload PRIYA SHARMA
+    draw.text((240, 200), "VIKRAM MEHTA", fill=(15, 30, 60), font=f_val)
+    draw.text((240, 240), "Father's Name", fill=(70, 90, 120), font=f_lbl)
+    draw.text((240, 260), "RAMESH SHARMA", fill=(15, 30, 60), font=f_val)
+    draw.text((240, 300), "Date of Birth", fill=(70, 90, 120), font=f_lbl)
+    draw.text((240, 320), "18/09/1994", fill=(15, 30, 60), font=f_val)
+
+    # QR payload contains original identity (ABCPS1234F / PRIYA SHARMA)
+    qr_payload = "PAN:ABCPS1234F^PRIYA SHARMA^RAMESH SHARMA^18/09/1994"
+    qr_img = generate_qr_image(qr_payload, 170)
+    img.paste(qr_img, (620, 135))
+
+    draw.rectangle([0, 0, w - 1, h - 1], outline=(160, 40, 40), width=2)
+    out_path = SAMPLE_DOCS_DIR / "sample_tampered_pan.jpg"
+    img.save(out_path, quality=94)
+    print(f"Generated: {out_path.name}")
+
+
 def generate_all_samples():
     """Generates all demonstration assets."""
     SAMPLE_DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -479,9 +634,12 @@ def generate_all_samples():
     make_matching_live_portrait()
     make_impersonating_live_portrait()
     make_tampered_passport()
+    make_genuine_visa()
     make_expired_visa()
     make_genuine_aadhaar()
+    make_tampered_aadhaar()
     make_genuine_pan()
+    make_tampered_pan()
     make_sample_business_card()
     print("=" * 60)
     print("All demo assets successfully generated in:", SAMPLE_DOCS_DIR)
@@ -490,4 +648,5 @@ def generate_all_samples():
 
 if __name__ == "__main__":
     generate_all_samples()
+
 

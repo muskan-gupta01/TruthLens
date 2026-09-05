@@ -158,10 +158,10 @@ def _detect_face_chrominance(cv_img: np.ndarray, is_document: bool = False) -> T
         return True, best_box
 
     if is_document:
-        roi_w = int(w_img * 0.28)
-        roi_h = int(h_img * 0.45)
+        roi_w = int(w_img * 0.205)
+        roi_h = int(roi_w / 0.78)
         roi_x = int(w_img * 0.05)
-        roi_y = int(h_img * 0.25)
+        roi_y = int(h_img * 0.22)
         return True, (roi_x, roi_y, roi_w, roi_h)
 
     roi_w = int(w_img * 0.50)

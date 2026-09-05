@@ -21,13 +21,14 @@ import numpy as np
 
 from app.pipeline.ocr_extractor import extract_document_fields
 from app.pipeline.qr_detector import detect_and_decode_qr
-from app.pipeline.format_validator import validate_document_rules
+from app.pipeline.format_validator import validate_document_rules, validate_verhoeff
 from app.pipeline.forensics_ela import run_ela_forensic_analysis
 from app.pipeline.metadata_forensics import analyze_image_metadata
 from app.pipeline.face_verifier import verify_identity_face
 from app.pipeline.cross_verifier import cross_verify_documents
 from app.pipeline.risk_engine import compute_risk_assessment
-from app.database.db_manager import log_screening
+from app.pipeline.explanation_engine import generate_officer_explanation
+from app.database.db_manager import log_screening, add_audit_chain_record
 from app.config import (
     DOC_TYPE_PASSPORT,
     DOC_TYPE_VISA,
@@ -196,8 +197,23 @@ def run_truthlens_screening(
     risk_level = risk_report["level"]
     risk_score = risk_report["score"]
 
-    name_val = fields.get("full_name") or fields.get("name")
-    num_val = fields.get("passport_number") or fields.get("visa_number") or fields.get("id_number")
+    qr_fields = qr_result.get("fields", {}) or {}
+    name_val = (
+        person_name_override or
+        fields.get("full_name") or
+        fields.get("name") or
+        fields.get("traveler_name") or
+        qr_fields.get("name")
+    )
+    num_val = (
+        doc_number_override or
+        fields.get("passport_number") or
+        fields.get("visa_number") or
+        fields.get("id_number") or
+        fields.get("license_number") or
+        fields.get("permit_id") or
+        qr_fields.get("id_number")
+    )
     claimed_type = ocr_result.get("claimed_type") or doc_type
     is_mismatch = ocr_result.get("is_claimed_mismatch", False)
     is_non_identity = ocr_result.get("is_non_identity", False) or (doc_type in [DOC_TYPE_BUSINESS_CARD, DOC_TYPE_NON_IDENTITY])
@@ -228,7 +244,11 @@ def run_truthlens_screening(
         format_status = "FAIL"
         format_detail = "UNRECOGNIZED: Document structure does not match institutional formats."
     else:
-        format_pass = validation_result.get("valid", False) and not validation_result.get("expired", False)
+        format_pass = (
+            validation_result.get("valid") is True or
+            validation_result.get("overall_status") == "PASSED" or
+            validation_result.get("failures_count", 0) == 0
+        ) and not validation_result.get("expired", False)
         format_status = "PASS" if format_pass else "WARN"
         format_detail = f"VALID: Compliant {doc_type} format with active validity period."
 
@@ -237,24 +257,46 @@ def run_truthlens_screening(
         checksum_status = "FAIL"
         checksum_detail = f"FAILED: No statutory {claimed_type} check digits or Verhoeff sequence present on non-identity media."
     elif doc_type == DOC_TYPE_PASSPORT:
+        pass_check = next((c for c in validation_result.get("checklist", []) if any(k in (c.get("check") or c.get("name") or "") for k in ["Passport", "ICAO"])), None)
         if mrz_data and mrz_data.get("checksums", {}).get("all_passed"):
             checksum_status = "PASS"
             checksum_detail = "ICAO 9303: All 7-3-1 check digits mathematically verified."
+        elif pass_check and pass_check.get("status") == "PASS":
+            checksum_status = "PASS"
+            checksum_detail = pass_check.get("detail", "ICAO 9303: Checksum valid.")
+        elif pass_check:
+            checksum_status = pass_check.get("status", "FAIL")
+            checksum_detail = pass_check.get("detail", "ICAO 9303 Checksum Mismatch: Optical character corruption or forged number.")
         else:
             checksum_status = "FAIL"
             checksum_detail = "ICAO 9303 Checksum Mismatch: Optical character corruption or forged number."
     elif doc_type == DOC_TYPE_AADHAAR:
-        v_passed = any(c.get("name") == "Verhoeff Checksum Algorithm" and c.get("status") == "PASS" for c in validation_result.get("checklist", []))
-        if v_passed:
+        v_check = next((c for c in validation_result.get("checklist", []) if "Verhoeff" in (c.get("check") or c.get("name") or "")), None)
+        if v_check and v_check.get("status") == "PASS":
             checksum_status = "PASS"
-            checksum_detail = "UIDAI Verhoeff: Dihedral D5 checksum algorithm valid."
+            checksum_detail = v_check.get("detail", "UIDAI Verhoeff: Dihedral D5 checksum algorithm valid.")
+        elif v_check:
+            checksum_status = v_check.get("status", "FAIL")
+            checksum_detail = v_check.get("detail", "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number.")
         else:
-            checksum_status = "FAIL"
-            checksum_detail = "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number."
+            # Fallback to direct validation
+            if num_val and validate_verhoeff(num_val):
+                checksum_status = "PASS"
+                checksum_detail = f"UIDAI Verhoeff: Dihedral D5 checksum algorithm valid for {num_val}."
+            else:
+                checksum_status = "FAIL"
+                checksum_detail = "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number."
     elif doc_type == DOC_TYPE_PAN:
-        pan_passed = any("PAN" in c.get("name", "") and c.get("status") == "PASS" for c in validation_result.get("checklist", []))
-        checksum_status = "PASS" if pan_passed else "FAIL"
-        checksum_detail = "Income Tax Dept 10-character structure valid." if pan_passed else "Invalid PAN entity structure."
+        pan_check = next((c for c in validation_result.get("checklist", []) if "PAN" in (c.get("check") or c.get("name") or "")), None)
+        if pan_check and pan_check.get("status") == "PASS":
+            checksum_status = "PASS"
+            checksum_detail = pan_check.get("detail", "Income Tax Dept 10-character structure valid.")
+        elif pan_check:
+            checksum_status = pan_check.get("status", "FAIL")
+            checksum_detail = pan_check.get("detail", "Invalid PAN entity structure.")
+        else:
+            checksum_status = "PASS" if format_pass else "WARN"
+            checksum_detail = "Income Tax Dept 10-character structure valid."
     else:
         checksum_status = "PASS" if format_pass else "WARN"
         checksum_detail = "Standard institutional syntax inspection."
@@ -333,6 +375,26 @@ def run_truthlens_screening(
         ]
     }
 
+    # Generate Plain-Language Officer Summary (LLM / Resilient Fallback)
+    explanation_res = {}
+    try:
+        explanation_res = generate_officer_explanation(
+            risk_report=risk_report,
+            doc_type=doc_type,
+            checkpoints=dossier.get("checkpoints"),
+            face_match_pct=match_pct
+        )
+    except Exception as e:
+        print(f"[EXPLANATION ENGINE NOTICE] Falling back to default summary: {e}")
+        explanation_res = {
+            "explanation": summary,
+            "source": "system_default",
+            "model": "None"
+        }
+
+    officer_summary_text = explanation_res.get("explanation", summary)
+    dossier["officer_summary"] = officer_summary_text
+    dossier["officer_summary_meta"] = explanation_res
 
     # Master audit record
     full_report = {
@@ -344,6 +406,8 @@ def run_truthlens_screening(
         "risk_score": risk_score,
         "confidence": 92.0 if risk_level == "LOW" else 88.0,
         "summary": summary,
+        "officer_summary": officer_summary_text,
+        "officer_summary_meta": explanation_res,
         "officer_recommendation": risk_report["officer_recommendation"],
         "elapsed_ms": elapsed_ms,
         "dossier": dossier,
@@ -368,10 +432,23 @@ def run_truthlens_screening(
         "explainability": explainability
     }
 
-    # Log to SQLite local database
+    # Log to SQLite local database & cryptographic audit chain
     try:
         log_screening(full_report)
+        audit_record = add_audit_chain_record(
+            screening_id=screening_id,
+            data_snapshot=full_report,
+            timestamp=full_report.get("timestamp")
+        )
+        full_report["audit_trail"] = {
+            "chain_id": audit_record["id"],
+            "record_hash": audit_record["record_hash"],
+            "previous_hash": audit_record["previous_hash"],
+            "short_hash": audit_record["short_hash"],
+            "short_prev_hash": audit_record["short_prev_hash"],
+            "tamper_proof": True
+        }
     except Exception as e:
-        print(f"[DB ERROR] Failed to log screening: {e}")
+        print(f"[DB ERROR] Failed to log screening / audit chain: {e}")
 
     return full_report

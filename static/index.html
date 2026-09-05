@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=6.0" />
+  <link rel="stylesheet" href="/static/css/style.css?v=9.0" />
 </head>
 
 <body>
@@ -88,6 +88,9 @@
       </button>
       <button type="button" class="nav-tab" data-tab="tab-history">
         <span class="nav-icon">🕒</span> Screening History
+      </button>
+      <button type="button" class="nav-tab" data-tab="tab-audit">
+        <span class="nav-icon">⛓️</span> Audit Integrity
       </button>
       <button type="button" class="nav-tab" data-tab="tab-mockdb">
         <span class="nav-icon">🗄️</span> Mock Database
@@ -199,28 +202,72 @@
           <div class="card-body">
             <p class="card-desc">Click to immediately execute pre-packaged test cases:</p>
             <div class="demo-quick-buttons">
+              <!-- PASSPORT PAIR -->
               <button type="button" class="quick-demo-btn btn-scenario-1" id="btn-quick-scenario-1">
                 <div class="btn-top">
                   <span class="badge-green">Scenario 1</span>
                   <strong>Genuine Passport + Face Match</strong>
                 </div>
-                <small>Authentic US Passport, valid MRZ, matching live face (Low Risk: 6/100)</small>
+                <small>Authentic US Passport, valid MRZ, matching live face (Low Risk: 0/100)</small>
               </button>
 
               <button type="button" class="quick-demo-btn btn-scenario-2" id="btn-quick-scenario-2">
                 <div class="btn-top">
                   <span class="badge-red">Scenario 2</span>
-                  <strong>Expired Visa (Watchlist Alert)</strong>
-                </div>
-                <small>Expired Schengen tourist visa, overstay alert in mock database (High Risk)</small>
-              </button>
-
-              <button type="button" class="quick-demo-btn btn-scenario-3" id="btn-quick-scenario-3">
-                <div class="btn-top">
-                  <span class="badge-red">Scenario 3</span>
                   <strong>Tampered Passport + Impersonation</strong>
                 </div>
-                <small>Spliced photo, altered name (Interpol alert), corrupt MRZ, face mismatch</small>
+                <small>Spliced photo, altered name (Interpol alert), corrupt MRZ, face mismatch (High Risk)</small>
+              </button>
+
+              <!-- VISA PAIR -->
+              <button type="button" class="quick-demo-btn btn-scenario-3" id="btn-quick-scenario-3">
+                <div class="btn-top">
+                  <span class="badge-green">Scenario 3</span>
+                  <strong>Genuine Visa (Valid Stay & Transit)</strong>
+                </div>
+                <small>Authentic Schengen tourist visa, 90-day stay compliance, verified until 2027 (Low Risk)</small>
+              </button>
+
+              <button type="button" class="quick-demo-btn btn-scenario-4" id="btn-quick-scenario-4">
+                <div class="btn-top">
+                  <span class="badge-red">Scenario 4</span>
+                  <strong>Expired Visa (Watchlist Alert)</strong>
+                </div>
+                <small>Expired Schengen tourist visa, overstay alert in mock database (High Risk: 100/100)</small>
+              </button>
+
+              <!-- AADHAAR PAIR -->
+              <button type="button" class="quick-demo-btn btn-scenario-5" id="btn-quick-scenario-5">
+                <div class="btn-top">
+                  <span class="badge-green">Scenario 5</span>
+                  <strong>Genuine Aadhaar (Verhoeff Checksum)</strong>
+                </div>
+                <small>UIDAI secure QR match, mathematical Verhoeff dihedral D5 checksum valid (Low Risk)</small>
+              </button>
+
+              <button type="button" class="quick-demo-btn btn-scenario-6" id="btn-quick-scenario-6">
+                <div class="btn-top">
+                  <span class="badge-red">Scenario 6</span>
+                  <strong>Tampered Aadhaar (Name vs QR Mismatch)</strong>
+                </div>
+                <small>Photoshop altered printed name contradicts cryptographic QR payload (High Risk)</small>
+              </button>
+
+              <!-- PAN CARD PAIR -->
+              <button type="button" class="quick-demo-btn btn-scenario-7" id="btn-quick-scenario-7">
+                <div class="btn-top">
+                  <span class="badge-green">Scenario 7</span>
+                  <strong>Genuine PAN Card (ITD Entity Code)</strong>
+                </div>
+                <small>Income Tax Department format verified, 4th character entity code 'P' valid (Low Risk)</small>
+              </button>
+
+              <button type="button" class="quick-demo-btn btn-scenario-8" id="btn-quick-scenario-8">
+                <div class="btn-top">
+                  <span class="badge-red">Scenario 8</span>
+                  <strong>Tampered PAN Card (Photo Splice & QR Conflict)</strong>
+                </div>
+                <small>Spliced portrait, altered name, duplicate PAN watchlist match (High Risk: 100/100)</small>
               </button>
             </div>
           </div>
@@ -340,32 +387,49 @@
             <span class="badge-tech">Biometric 1:1</span>
           </div>
           <div class="card-body">
+            <!-- Mode Switcher (Upload vs Live Camera) -->
             <div class="live-input-toggle">
-              <button type="button" class="toggle-btn active" id="btn-mode-upload">Upload File</button>
-              <button type="button" class="toggle-btn" id="btn-mode-webcam">Live Webcam</button>
+              <button type="button" class="toggle-btn active" id="btn-mode-upload">
+                <span class="toggle-icon">📁</span> Upload Photo
+              </button>
+              <button type="button" class="toggle-btn" id="btn-mode-webcam">
+                <span class="toggle-icon">📷</span> Use Live Camera
+              </button>
             </div>
 
-            <!-- File Upload for Live Face -->
-            <div class="dropzone" id="live-dropzone">
-              <input type="file" id="live-file-input" accept="image/jpeg,image/png,image/jpg"
-                class="file-input-hidden" />
-              <div class="dropzone-content" id="live-dropzone-content">
-                <div class="drop-icon">👤</div>
-                <h4 class="drop-title">Drop live passenger photo</h4>
-                <p class="drop-sub">Frontal facial portrait for 1:1 biometric comparison</p>
-              </div>
-              <div class="preview-box hidden" id="live-preview-box">
-                <img id="live-preview-img" src="" alt="Live Face Preview" />
-                <button type="button" class="btn-clear-img" id="btn-clear-live" title="Remove image">✕</button>
+            <!-- Panel 1: File Upload for Live Face -->
+            <div class="live-mode-panel" id="panel-live-upload">
+              <div class="dropzone" id="live-dropzone">
+                <input type="file" id="live-file-input" accept="image/jpeg,image/png,image/jpg"
+                  class="file-input-hidden" />
+                <div class="dropzone-content" id="live-dropzone-content">
+                  <div class="drop-icon">👤</div>
+                  <h4 class="drop-title">Drop live passenger photo</h4>
+                  <p class="drop-sub">or click to browse portrait (JPEG, PNG)</p>
+                </div>
+                <div class="preview-box hidden" id="live-preview-box">
+                  <img id="live-preview-img" src="" alt="Live Face Preview" />
+                  <button type="button" class="btn-clear-img" id="btn-clear-live" title="Remove image">✕</button>
+                </div>
               </div>
             </div>
 
-            <!-- Webcam Viewfinder (Initially Hidden) -->
-            <div class="webcam-box hidden" id="webcam-container">
-              <video id="webcam-video" autoplay playsinline></video>
-              <div class="webcam-controls">
-                <button type="button" class="cyber-btn btn-secondary" id="btn-webcam-snap">📸 Capture Snapshot</button>
-                <button type="button" class="cyber-btn btn-outline" id="btn-webcam-cancel">Cancel</button>
+            <!-- Panel 2: Live Webcam Viewfinder (Only shown when Live Camera is clicked) -->
+            <div class="live-mode-panel hidden" id="panel-live-webcam">
+              <div class="webcam-box" id="webcam-container">
+                <div class="webcam-live-bar">
+                  <span class="live-indicator-dot"></span>
+                  <span>LIVE CAMERA FEED ACTIVE</span>
+                </div>
+                <video id="webcam-video" autoplay playsinline muted></video>
+                <div class="webcam-controls">
+                  <button type="button" class="cyber-btn btn-primary" id="btn-webcam-snap">
+                    <span>📸 Capture Snapshot</span>
+                  </button>
+                  <button type="button" class="cyber-btn btn-outline" id="btn-webcam-cancel">
+                    <span>✕ Cancel</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -545,6 +609,20 @@
               <div class="checklist-stack" id="dossier-checklist-stack">
                 <!-- Dynamically populated -->
               </div>
+              <!-- Officer Summary (Plain-Language AI Explanation) -->
+              <div class="officer-summary-box" id="dossier-officer-summary-box">
+                <div class="officer-summary-header">
+                  <div class="summary-title-group">
+                    <span class="summary-icon">🛡️</span>
+                    <span class="summary-heading">Officer Briefing &amp; Plain-Language Rationale</span>
+                  </div>
+                  <span class="ai-source-badge badge-local" id="dossier-summary-source-badge">🔒 LOCAL-FIRST PRIVACY ENGINE</span>
+                </div>
+                <p class="officer-summary-text" id="dossier-officer-summary">
+                  Awaiting screening execution to generate non-technical plain language summary.
+                </p>
+              </div>
+
               <div class="officer-decision-box" id="dossier-officer-box">
                 <div class="officer-box-title">👮 Border Officer Protocol:</div>
                 <p class="officer-box-text" id="dossier-officer-rec">
@@ -878,24 +956,26 @@
       </div>
 
       <div class="cyber-card">
-        <div class="card-header">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
           <h3>Screening Audit Log</h3>
-          <button type="button" class="cyber-btn btn-secondary btn-sm" id="btn-refresh-history">↻ Refresh
-            History</button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button type="button" class="cyber-btn btn-secondary btn-sm" id="btn-refresh-history">↻ Refresh History</button>
+            <button type="button" class="cyber-btn btn-danger btn-sm" id="btn-clear-history" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #fca5a5;">🗑️ Clear History</button>
+          </div>
         </div>
         <div class="card-body">
           <div class="table-responsive">
             <table class="cyber-table" id="history-table">
               <thead>
                 <tr>
-                  <th>Screening ID</th>
-                  <th>Date &amp; Time</th>
-                  <th>Document Type</th>
-                  <th>Subject Name</th>
-                  <th>Document No</th>
-                  <th>Risk Score</th>
-                  <th>Verdict</th>
-                  <th>Action</th>
+                  <th style="min-width: 170px;">Screening ID</th>
+                  <th style="min-width: 160px;">Date &amp; Time</th>
+                  <th style="min-width: 120px;">Document Type</th>
+                  <th style="min-width: 170px;">Subject Name</th>
+                  <th style="min-width: 160px;">Document No</th>
+                  <th style="min-width: 100px; text-align: center;">Risk Score</th>
+                  <th style="min-width: 200px;">Verdict</th>
+                  <th style="min-width: 100px; text-align: center;">Action</th>
                 </tr>
               </thead>
               <tbody id="history-tbody">
@@ -933,24 +1013,26 @@
           <span class="badge-tech">SQLite Local Table</span>
         </div>
         <div class="card-body">
-          <table class="cyber-table" id="mockdb-table">
-            <thead>
-              <tr>
-                <th>Document No</th>
-                <th>Type</th>
-                <th>Subject Name</th>
-                <th>Status</th>
-                <th>Flagged Reason</th>
-                <th>Country</th>
-                <th>Security Notes</th>
-              </tr>
-            </thead>
-            <tbody id="mockdb-tbody">
-              <tr>
-                <td colspan="7" class="table-empty">Loading simulated watchlist records...</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="cyber-table" id="mockdb-table">
+              <thead>
+                <tr>
+                  <th style="min-width: 140px;">Document No</th>
+                  <th style="min-width: 120px;">Type</th>
+                  <th style="min-width: 160px;">Subject Name</th>
+                  <th style="min-width: 130px;">Status</th>
+                  <th style="min-width: 250px;">Flagged Reason</th>
+                  <th style="min-width: 90px; text-align: center;">Country</th>
+                  <th style="min-width: 200px;">Security Notes</th>
+                </tr>
+              </thead>
+              <tbody id="mockdb-tbody">
+                <tr>
+                  <td colspan="7" class="table-empty">Loading simulated watchlist records...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
@@ -1001,6 +1083,93 @@
               <li><strong>Layer 5: Biometric Verification</strong> — 1:1 HSV &amp; structural template facial
                 correlation.</li>
             </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================= -->
+    <!-- TAB 11: CRYPTOGRAPHIC AUDIT INTEGRITY (HASH-CHAINING)             -->
+    <!-- ================================================================= -->
+    <section id="tab-audit" class="tab-pane">
+      <div class="section-intro">
+        <h1 class="page-title">Tamper-Proof Audit Trail (Cryptographic Hash-Chaining)</h1>
+        <p class="page-desc">
+          Blockchain-inspired cryptographic ledger. Every completed screening is hashed via SHA-256 and sequentially linked
+          to the previous block's hash. Any retroactive modification or database tampering instantly breaks the chain.
+        </p>
+      </div>
+
+      <!-- Audit KPI Summary Cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon icon-blue">⛓️</div>
+          <div class="kpi-details">
+            <span class="kpi-label">Chained Blocks</span>
+            <span class="kpi-value" id="audit-kpi-total">0</span>
+            <span class="kpi-meta">Sequential SHA-256 blocks</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-green" id="audit-kpi-status-icon">🛡️</div>
+          <div class="kpi-details">
+            <span class="kpi-label">Ledger Integrity</span>
+            <span class="kpi-value" id="audit-kpi-status" style="font-size: 1.1rem; color: #10b981;">VERIFIED</span>
+            <span class="kpi-meta" id="audit-kpi-status-meta">Zero tampering detected</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon icon-purple">🔑</div>
+          <div class="kpi-details">
+            <span class="kpi-label">Genesis Hash Anchor</span>
+            <span class="kpi-value" style="font-size: 0.85rem; font-family: monospace; color: #94a3b8;">00000000...</span>
+            <span class="kpi-meta">Fixed Genesis Block</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Control Bar & Action Banner -->
+      <div class="cyber-card" style="margin-top: 1.5rem;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3>Audit Chain Cryptographic Verifier</h3>
+            <span class="badge-tech">SHA-256 Continuous Invariant</span>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="cyber-btn btn-primary" id="btn-verify-audit-chain">
+              <span class="btn-icon">🔍</span> Verify Chain Integrity
+            </button>
+            <button type="button" class="cyber-btn btn-outline" id="btn-refresh-audit-chain">
+              <span class="btn-icon">🔄</span> Refresh Ledger
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Verification Result Banner -->
+          <div id="audit-verification-banner" class="audit-banner neutral">
+            <div class="audit-banner-icon" id="audit-banner-icon">ℹ️</div>
+            <div class="audit-banner-content">
+              <h4 id="audit-banner-title">Chain Verification Ready</h4>
+              <p id="audit-banner-desc">Click "Verify Chain Integrity" to audit all cryptographic links from Genesis to the latest screening block.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visual Hash Chain & Block Explorer -->
+      <div class="cyber-card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+          <h3>Visual Hash-Chain Explorer</h3>
+          <span class="badge-tech">Sequential Linked Blocks</span>
+        </div>
+        <div class="card-body">
+          <p style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.25rem;">
+            Each block binds the complete JSON screening result, the timestamp, and the preceding record's 64-char SHA-256 hash.
+          </p>
+          <div class="hash-chain-scroll-container">
+            <div class="hash-chain-list" id="hash-chain-visual-list">
+              <div class="hash-chain-empty">Loading cryptographic audit blocks...</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1058,7 +1227,7 @@
   </div>
 
   <!-- Client Application Script -->
-  <script src="/static/js/app.js?v=6.0"></script>
+  <script src="/static/js/app.js?v=9.0"></script>
 </body>
 
 </html>

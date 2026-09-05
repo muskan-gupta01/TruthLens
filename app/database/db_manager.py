@@ -112,6 +112,21 @@ def init_database():
         )
     """)
 
+    # 5. Tamper-Proof Audit Chain Table (Hash-Chaining)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_chain (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            screening_id TEXT NOT NULL,
+            record_hash TEXT NOT NULL,
+            previous_hash TEXT NOT NULL,
+            data_snapshot TEXT NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_audit_chain_screening ON audit_chain(screening_id)
+    """)
+
     # Seed mock records if table is empty
     cursor.execute("SELECT COUNT(*) FROM mock_watchlists")
     count = cursor.fetchone()[0]
@@ -163,6 +178,20 @@ def init_database():
             "Female",
             default_admin_pwd,
             "SUPERVISOR",
+            now_str
+        ))
+        default_officer2_pwd = hash_password("Officer2@2026")
+        cursor.execute("""
+            INSERT INTO users (user_id, full_name, email, phone, gender, password_hash, role, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            f"TL-USR-{uuid.uuid4().hex[:8].upper()}",
+            "Border Officer 2",
+            "officer2@truthlens.gov.in",
+            "+91 98111 22233",
+            "Male",
+            default_officer2_pwd,
+            "OFFICER",
             now_str
         ))
 
@@ -254,8 +283,41 @@ def log_screening(data: Dict[str, Any]) -> str:
     screening_id = data.get("screening_id") or f"TL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     timestamp = data.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     doc_type = data.get("doc_type", "UNKNOWN")
-    person_name = data.get("ocr", {}).get("fields", {}).get("name") or data.get("ocr", {}).get("fields", {}).get("full_name") or "UNSPECIFIED"
-    doc_number = data.get("ocr", {}).get("fields", {}).get("id_number") or data.get("ocr", {}).get("fields", {}).get("passport_number") or data.get("ocr", {}).get("fields", {}).get("visa_number")
+
+    dossier = data.get("dossier", {}) or {}
+    sub_name = dossier.get("subject_name")
+    if sub_name and sub_name not in ["Not Detected", "UNSPECIFIED", "N/A", ""]:
+        person_name = sub_name
+    else:
+        person_name = (
+            data.get("ocr", {}).get("fields", {}).get("name")
+            or data.get("ocr", {}).get("fields", {}).get("full_name")
+            or data.get("ocr", {}).get("fields", {}).get("traveler_name")
+            or data.get("qr", {}).get("fields", {}).get("name")
+            or data.get("cross_verification", {}).get("qr_data", {}).get("name")
+            or "UNSPECIFIED"
+        )
+
+    # Detect if Aadhaar back side was uploaded without printed name
+    if person_name == "UNSPECIFIED" and doc_type == "AADHAAR":
+        raw_ocr = str(data.get("ocr", {}).get("raw_text", "")).upper()
+        if "AADHAAR IS PROOF" in raw_ocr or "PROOF OF IDENTITY" in raw_ocr or "UNIQUE IDENTIFICATION" in raw_ocr:
+            person_name = "Subject (Aadhaar Back Side)"
+
+    doc_no = dossier.get("doc_number")
+    if doc_no and doc_no not in ["Not Detected", "N/A", ""]:
+        doc_number = doc_no
+    else:
+        doc_number = (
+            data.get("ocr", {}).get("fields", {}).get("id_number")
+            or data.get("ocr", {}).get("fields", {}).get("passport_number")
+            or data.get("ocr", {}).get("fields", {}).get("visa_number")
+            or data.get("ocr", {}).get("fields", {}).get("license_number")
+            or data.get("ocr", {}).get("fields", {}).get("permit_id")
+            or data.get("qr", {}).get("fields", {}).get("id_number")
+            or "N/A"
+        )
+
     risk_score = data.get("risk_assessment", {}).get("score", 0)
     risk_level = data.get("risk_assessment", {}).get("level", "LOW")
     verdict = data.get("verdict", "UNKNOWN")
@@ -271,6 +333,16 @@ def log_screening(data: Dict[str, Any]) -> str:
     conn.commit()
     conn.close()
     return screening_id
+
+
+def clear_history():
+    """Deletes all screening audit logs and clears audit chain from SQLite."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM screening_history")
+    cursor.execute("DELETE FROM audit_chain")
+    conn.commit()
+    conn.close()
 
 
 def get_history(limit: int = 50) -> List[Dict[str, Any]]:
@@ -297,6 +369,206 @@ def get_screening_by_id(screening_id: str) -> Optional[Dict[str, Any]]:
     if row:
         return json.loads(row["full_data_json"])
     return None
+
+
+# ============================================================================
+# CRYPTOGRAPHIC AUDIT CHAIN (HASH-CHAINING)
+# ============================================================================
+
+GENESIS_HASH = "0" * 64
+
+
+def get_latest_audit_hash() -> str:
+    """Returns the record_hash of the latest entry in audit_chain, or genesis hash if empty."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT record_hash FROM audit_chain ORDER BY id DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    if row and row["record_hash"]:
+        return str(row["record_hash"])
+    return GENESIS_HASH
+
+
+def add_audit_chain_record(
+    screening_id: str,
+    data_snapshot: Any,
+    timestamp: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Appends a new cryptographically signed block to the audit_chain.
+    Computes: record_hash = SHA-256(data_snapshot + previous_hash + timestamp)
+    Uses genesis hash ("0"*64) if chain is empty.
+    """
+    # Deterministic canonical serialization of data_snapshot
+    if isinstance(data_snapshot, (dict, list)):
+        snapshot_str = json.dumps(data_snapshot, sort_keys=True)
+    else:
+        snapshot_str = str(data_snapshot)
+
+    ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    prev_hash = get_latest_audit_hash()
+
+    # Cryptographic hash computation
+    payload = f"{snapshot_str}{prev_hash}{ts}"
+    record_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO audit_chain (timestamp, screening_id, record_hash, previous_hash, data_snapshot)
+        VALUES (?, ?, ?, ?, ?)
+    """, (ts, screening_id, record_hash, prev_hash, snapshot_str))
+    chain_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    return {
+        "id": chain_id,
+        "screening_id": screening_id,
+        "timestamp": ts,
+        "record_hash": record_hash,
+        "previous_hash": prev_hash,
+        "short_hash": record_hash[:8],
+        "short_prev_hash": prev_hash[:8]
+    }
+
+
+def verify_audit_chain() -> Dict[str, Any]:
+    """
+    Cryptographically verifies the entire audit hash-chain from genesis to latest.
+    Detects both payload tampering (data_snapshot modification) and broken linkage (previous_hash tampering).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, timestamp, screening_id, record_hash, previous_hash, data_snapshot 
+        FROM audit_chain ORDER BY id ASC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    total = len(rows)
+    if total == 0:
+        return {
+            "valid": True,
+            "total_records": 0,
+            "verified_count": 0,
+            "broken_at": None,
+            "message": "Audit chain is empty. Genesis state intact."
+        }
+
+    expected_prev = GENESIS_HASH
+
+    for idx, row in enumerate(rows):
+        r_id = row["id"]
+        r_ts = row["timestamp"]
+        r_sid = row["screening_id"]
+        r_hash = row["record_hash"]
+        r_prev = row["previous_hash"]
+        r_data = row["data_snapshot"]
+
+        # 1. Verify previous_hash linkage
+        if r_prev != expected_prev:
+            return {
+                "valid": False,
+                "total_records": total,
+                "verified_count": idx,
+                "broken_at": r_id,
+                "reason": f"Broken chain link at record #{r_id}: previous_hash '{r_prev[:8]}...' does not match preceding record's hash '{expected_prev[:8]}...'",
+                "details": {
+                    "record_id": r_id,
+                    "screening_id": r_sid,
+                    "timestamp": r_ts,
+                    "stored_previous_hash": r_prev,
+                    "expected_previous_hash": expected_prev
+                }
+            }
+
+        # 2. Recompute SHA-256(data_snapshot + previous_hash + timestamp)
+        payload = f"{r_data}{r_prev}{r_ts}"
+        computed_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+        if computed_hash != r_hash:
+            return {
+                "valid": False,
+                "total_records": total,
+                "verified_count": idx,
+                "broken_at": r_id,
+                "reason": f"Cryptographic tamper detected at record #{r_id}: recomputed hash '{computed_hash[:8]}...' does not match stored hash '{r_hash[:8]}...'",
+                "details": {
+                    "record_id": r_id,
+                    "screening_id": r_sid,
+                    "timestamp": r_ts,
+                    "stored_hash": r_hash,
+                    "recomputed_hash": computed_hash
+                }
+            }
+
+        # Advance expected previous hash to this block's hash
+        expected_prev = r_hash
+
+    return {
+        "valid": True,
+        "total_records": total,
+        "verified_count": total,
+        "broken_at": None,
+        "message": f"All {total} audit records cryptographically verified. Hash chain is 100% intact."
+    }
+
+
+def get_audit_chain_records(limit: int = 50) -> List[Dict[str, Any]]:
+    """Retrieves recent audit chain blocks formatted for frontend visualization."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT a.id, a.timestamp, a.screening_id, a.record_hash, a.previous_hash, a.data_snapshot,
+               h.doc_type, h.doc_number, h.person_name, h.verdict
+        FROM audit_chain a
+        LEFT JOIN screening_history h ON a.screening_id = h.screening_id
+        ORDER BY a.id DESC LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    result = []
+    for r in rows:
+        doc_type = r["doc_type"] if ("doc_type" in r.keys() and r["doc_type"]) else None
+        doc_number = r["doc_number"] if ("doc_number" in r.keys() and r["doc_number"]) else None
+        person_name = r["person_name"] if ("person_name" in r.keys() and r["person_name"]) else None
+        verdict = r["verdict"] if ("verdict" in r.keys() and r["verdict"]) else None
+
+        # Fallback to data_snapshot if not present in screening_history
+        if (not doc_number or not doc_type) and r["data_snapshot"]:
+            try:
+                snap = json.loads(r["data_snapshot"])
+                if not doc_type:
+                    doc_type = snap.get("doc_type")
+                if not doc_number:
+                    doc_number = snap.get("doc_number") or snap.get("ocr", {}).get("fields", {}).get("passport_number") or snap.get("ocr", {}).get("fields", {}).get("id_number")
+                if not person_name:
+                    person_name = snap.get("person_name")
+                if not verdict:
+                    verdict = snap.get("verdict")
+            except Exception:
+                pass
+
+        result.append({
+            "id": r["id"],
+            "timestamp": r["timestamp"],
+            "screening_id": r["screening_id"],
+            "record_hash": r["record_hash"],
+            "previous_hash": r["previous_hash"],
+            "short_hash": r["record_hash"][:8],
+            "short_prev_hash": r["previous_hash"][:8],
+            "doc_type": doc_type or "DOCUMENT",
+            "doc_number": doc_number or "N/A",
+            "person_name": person_name or "N/A",
+            "verdict": verdict or "RECORDED"
+        })
+    # Return in chronological order so it reads left-to-right (genesis to latest)
+    result.reverse()
+    return result
 
 
 def get_all_mock_watchlists() -> List[Dict[str, Any]]:

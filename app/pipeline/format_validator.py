@@ -519,6 +519,11 @@ def validate_document_rules(
             "detail": "Single unique screening transaction confirmed."
         })
 
+    # Ensure every checklist item has both 'check' and 'name' for backwards compatibility
+    for item in checklist:
+        if "name" not in item and "check" in item:
+            item["name"] = item["check"]
+
     # Summary verdict
     if total_failures > 0:
         overall_status = "FAILED"
@@ -531,6 +536,7 @@ def validate_document_rules(
         verdict_label = "ALL CHECKS PASSED"
 
     return {
+        "valid": (total_failures == 0),
         "overall_status": overall_status,
         "verdict_label": verdict_label,
         "total_checks": len(checklist),

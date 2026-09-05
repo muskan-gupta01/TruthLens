@@ -35,6 +35,7 @@ from app.config import (
 from app.pipeline.screening_pipeline import run_truthlens_screening
 from app.database.db_manager import (
     get_history,
+    clear_history,
     get_screening_by_id,
     get_all_mock_watchlists,
     get_dashboard_statistics,
@@ -43,7 +44,9 @@ from app.database.db_manager import (
     create_user_session,
     validate_user_session,
     delete_user_session,
-    get_user_by_id
+    get_user_by_id,
+    verify_audit_chain,
+    get_audit_chain_records
 )
 
 app = FastAPI(
@@ -319,7 +322,8 @@ async def health_check():
             "Module 2: Document Rule & Checksum Validation",
             "Module 3: Tampering Detection (ELA Heatmap, Photo Splice, Stamp Check)",
             "Module 4: Biometric Face Verification (1:1 Document vs Live Passenger)",
-            "Module 5: Mock Border Verification Database & Watchlists"
+            "Module 5: Mock Border Verification Database & Watchlists",
+            "Module 6: Cryptographic Hash-Chained Audit Trail (Tamper-Proof Ledger)"
         ]
     }
 
@@ -347,16 +351,6 @@ async def list_sample_documents():
             "matching_live_portrait": "demo_person_live_match.jpg"
         },
         {
-            "id": "demo_visa_expired",
-            "title": "Expired Schengen Visa (Watchlist Alert)",
-            "doc_type": "VISA",
-            "expected_verdict": "HIGH RISK / SUSPICIOUS DOCUMENT",
-            "description": "Expired French tourist visa flagged in Mock Watchlist for overstay violation (Maria Gonzalez).",
-            "badge_color": "rose",
-            "filename": "demo_visa_expired.jpg",
-            "matching_live_portrait": None
-        },
-        {
             "id": "demo_passport_tampered",
             "title": "Tampered Passport & Spliced Portrait",
             "doc_type": "PASSPORT",
@@ -365,6 +359,26 @@ async def list_sample_documents():
             "badge_color": "rose",
             "filename": "demo_passport_tampered.jpg",
             "matching_live_portrait": "demo_person_live_mismatch.jpg"
+        },
+        {
+            "id": "demo_visa_genuine",
+            "title": "Genuine Schengen Tourist Visa",
+            "doc_type": "VISA",
+            "expected_verdict": "VERIFIED / LOW RISK",
+            "description": "Authentic French tourist visa (Elena Rostova), 90-day stay compliance, verified until 2027.",
+            "badge_color": "emerald",
+            "filename": "demo_visa_genuine.jpg",
+            "matching_live_portrait": None
+        },
+        {
+            "id": "demo_visa_expired",
+            "title": "Expired Schengen Visa (Watchlist Alert)",
+            "doc_type": "VISA",
+            "expected_verdict": "HIGH RISK / SUSPICIOUS DOCUMENT",
+            "description": "Expired French tourist visa flagged in Mock Watchlist for overstay violation (Maria Gonzalez).",
+            "badge_color": "rose",
+            "filename": "demo_visa_expired.jpg",
+            "matching_live_portrait": None
         },
         {
             "id": "sample_genuine_aadhaar",
@@ -394,6 +408,16 @@ async def list_sample_documents():
             "description": "Income Tax Department format verified, valid 4th entity char 'P', clean ELA forensics.",
             "badge_color": "emerald",
             "filename": "sample_genuine_pan.jpg",
+            "matching_live_portrait": None
+        },
+        {
+            "id": "sample_tampered_pan",
+            "title": "Tampered PAN Card (Altered Name & QR Conflict)",
+            "doc_type": "PAN",
+            "expected_verdict": "HIGH RISK / SUSPICIOUS DOCUMENT",
+            "description": "Spliced portrait, altered printed name 'Vikram Mehta' vs QR 'Priya Sharma', cancelled duplicate PAN watchlist hit.",
+            "badge_color": "rose",
+            "filename": "sample_tampered_pan.jpg",
             "matching_live_portrait": None
         }
     ]
@@ -501,6 +525,13 @@ async def get_screening_history_endpoint():
     return {"history": history}
 
 
+@app.post("/api/history/clear")
+async def clear_screening_history_endpoint():
+    """Clears all previous screening audit records from SQLite."""
+    clear_history()
+    return {"success": True, "message": "Screening audit logs successfully cleared."}
+
+
 @app.get("/api/history/{screening_id}")
 async def get_screening_report_endpoint(screening_id: str):
     """Retrieves full JSON audit record for a given screening ID."""
@@ -518,5 +549,33 @@ async def get_mock_database_endpoint():
         "disclaimer": "DEMO DATA – NOT CONNECTED TO GOVERNMENT DATABASES",
         "description": "Simulated border control watchlist, stolen passport registry, and revocation notices for demonstration purposes.",
         "records": records
+    }
+
+
+# ============================================================================
+# CRYPTOGRAPHIC AUDIT TRAIL API ENDPOINTS
+# ============================================================================
+
+@app.get("/api/audit/verify")
+async def api_audit_verify():
+    """
+    Cryptographically audits the entire hash-chained ledger.
+    Walks from genesis ("0"*64) to the latest entry, recomputing SHA-256 digests
+    and confirming link integrity.
+    """
+    verification_result = verify_audit_chain()
+    return JSONResponse(content=verification_result)
+
+
+@app.get("/api/audit/chain")
+async def api_audit_chain(limit: int = 50):
+    """
+    Returns recent blocks in the cryptographic hash-chain for visual ledger rendering.
+    """
+    chain_records = get_audit_chain_records(limit=limit)
+    return {
+        "total_records": len(chain_records),
+        "genesis_hash": "0" * 64,
+        "chain": chain_records
     }
 

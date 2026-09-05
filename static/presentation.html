@@ -507,29 +507,31 @@
     </section>
 
     <!-- SLIDE 8: MOCK DATABASE & SQLITE AUDIT TRAIL -->
+    <!-- SLIDE 8: CRYPTOGRAPHIC AUDIT LEDGER & PRIVACY -->
     <section class="slide" data-slide="8">
       <div class="slide-header">
-        <div class="slide-kicker">INTELLIGENCE &amp; PERSISTENCE</div>
-        <h2 class="slide-title">Mock Verification Database &amp; Local SQLite Audit Trail</h2>
+        <div class="slide-kicker">INTEGRITY &amp; PRIVACY (BLOCKCHAIN &amp; CYBERSECURITY)</div>
+        <h2 class="slide-title">Cryptographic Audit Ledger &amp; DPDP Act Data Privacy</h2>
       </div>
       <div class="grid-2">
-        <div class="cyber-card border-yellow">
-          <h3 class="card-title" style="color: var(--yellow);">Mock Border Watchlist Database</h3>
+        <div class="cyber-card border-neon">
+          <h3 class="card-title" style="color: var(--neon);">Tamper-Proof Audit Chain (Hash-Chaining)</h3>
           <ul class="card-list">
-            <li><strong>Local Simulated Registry:</strong> Built on SQLite to demonstrate cross-border watchlist hits without accessing classified systems.</li>
-            <li><strong>Interpol Red Notices:</strong> Simulated notices for wanted individuals (e.g. Vikram Mehta).</li>
-            <li><strong>Stolen Blank Passports:</strong> Series of stolen blank travel document stock.</li>
-            <li><strong>Overstay &amp; Revocation Registry:</strong> Flagged tourist visas with exceeded stay limits (e.g. Maria Gonzalez).</li>
-            <li><strong>Prominent Disclaimer:</strong> "DEMO DATA – NOT CONNECTED TO GOVERNMENT DATABASES".</li>
+            <li><strong>Sequential SHA-256 Hashing:</strong> Each block cryptographically binds data_snapshot + previous_hash + timestamp.</li>
+            <li><strong>Immutable Genesis Anchor:</strong> Block #0 rooted at a fixed 64-char genesis digest ('0'*64) for mathematical trust.</li>
+            <li><strong>Continuous Ledger Verifier:</strong> Zero-trust engine (/api/audit/verify) recomputes and validates entire chain in milliseconds.</li>
+            <li><strong>Insider Tamper Detection:</strong> Direct SQLite alterations immediately fail verification and flag the exact corrupted record ID.</li>
+            <li><strong>Visual Block Explorer:</strong> Interactive UI renders sequential linked cards with short hashes and state indicators.</li>
           </ul>
         </div>
         <div class="cyber-card border-teal">
-          <h3 class="card-title" style="color: var(--neon);">Local SQLite Audit Trail</h3>
+          <h3 class="card-title" style="color: var(--teal);">DPDP Act 2023 Data Minimization</h3>
           <ul class="card-list">
-            <li><strong>Immutable Logs:</strong> Every screening is persisted with unique reference ID (e.g. TL-20260903-XXXX).</li>
-            <li><strong>Full JSON Retention:</strong> Preserves complete OCR matrices, ELA scores, and factor breakdown.</li>
-            <li><strong>Supervisor Inspection:</strong> Officers can search past screenings by date, passenger name, or risk tier.</li>
-            <li><strong>Printable Certificate:</strong> 1-click generation of formatted official Border Security Forensic Certificate.</li>
+            <li><strong>Display-Layer Masking:</strong> History list masks document numbers (e.g. 'XXXX XXXX 9012', 'XXXXX02C3', 'XXXXXX234F').</li>
+            <li><strong>Subject Name Preserved:</strong> Passenger names remain visible in table for rapid border officer identification.</li>
+            <li><strong>Active Officer Inspection:</strong> Clicking 'Inspect' reveals full unmasked dossier for active case adjudication.</li>
+            <li><strong>Cryptographic Invariant Intact:</strong> Underlying stored records and SHA-256 hash snapshots remain unmasked and valid.</li>
+            <li><strong>100% Local-First Edge Privacy:</strong> Zero citizen biometrics or credentials transmitted to external commercial cloud APIs.</li>
           </ul>
         </div>
       </div>
@@ -545,11 +547,11 @@
         <div class="cyber-card border-green">
           <span class="pill" style="margin-bottom: 0.5rem; display: inline-block; color: var(--green); border-color: var(--green);">SCENARIO 1</span>
           <h4 style="color: #fff; margin-bottom: 0.3rem;">Genuine Passport + Match</h4>
-          <p style="font-size: 0.82rem; color: var(--neon); font-weight: bold; margin-bottom: 0.5rem;">VERIFIED / LOW RISK (6/100)</p>
+          <p style="font-size: 0.82rem; color: var(--neon); font-weight: bold; margin-bottom: 0.5rem;">VERIFIED / LOW RISK (0/100)</p>
           <ul class="card-list" style="font-size: 0.85rem;">
-            <li>Authentic US Passport (Johnathan Doe).</li>
+            <li>Authentic US Passport (Johnathan Doe, A89412051).</li>
             <li>ICAO 9303 check digits: 100% verified.</li>
-            <li>Biometric Match: 82.5% similarity.</li>
+            <li>Biometric Match: 62.8% SFace similarity.</li>
             <li>Verdict: CLEAR FOR TRANSIT.</li>
           </ul>
         </div>
@@ -558,7 +560,7 @@
           <h4 style="color: #fff; margin-bottom: 0.3rem;">Expired Visa (Watchlist Alert)</h4>
           <p style="font-size: 0.82rem; color: var(--red); font-weight: bold; margin-bottom: 0.5rem;">HIGH RISK / SUSPICIOUS (100/100)</p>
           <ul class="card-list" style="font-size: 0.85rem;">
-            <li>Schengen Visa (Maria Gonzalez).</li>
+            <li>Schengen Visa (Maria Gonzalez, V9284710).</li>
             <li>Expired on 15/01/2024 (✕ Invalid).</li>
             <li>Mock DB: Revoked Tourist Visa - Overstay.</li>
             <li>Verdict: SECONDARY DETENTION.</li>
@@ -567,11 +569,11 @@
         <div class="cyber-card border-red">
           <span class="pill" style="margin-bottom: 0.5rem; display: inline-block; color: var(--red); border-color: var(--red);">SCENARIO 3</span>
           <h4 style="color: #fff; margin-bottom: 0.3rem;">Tampered Passport + Impersonation</h4>
-          <p style="font-size: 0.82rem; color: var(--red); font-weight: bold; margin-bottom: 0.5rem;">CRITICAL RISK / REJECTED (86/100)</p>
+          <p style="font-size: 0.82rem; color: var(--red); font-weight: bold; margin-bottom: 0.5rem;">HIGH RISK / REJECTED (63/100)</p>
           <ul class="card-list" style="font-size: 0.85rem;">
-            <li>Spliced headshot with ELA delta mismatch.</li>
+            <li>Spliced headshot with compression mismatch.</li>
             <li>Corrupt MRZ check digit mathematically flagged.</li>
-            <li>Biometric Mismatch: 32.5% similarity.</li>
+            <li>Biometric Mismatch: 35.3% similarity.</li>
             <li>Verdict: IDENTITY FRAUD DETECTED.</li>
           </ul>
         </div>
@@ -586,27 +588,27 @@
       </div>
       <div class="grid-2">
         <div class="cyber-card border-teal">
-          <h3 class="card-title" style="color: var(--neon);">1. Explainable Legal Audit Trail</h3>
+          <h3 class="card-title" style="color: var(--neon);">1. Court-Admissible Legal Explainability</h3>
           <p style="font-size: 0.95rem; color: var(--muted); line-height: 1.5;">
             Unlike black-box deep learning models that merely output a vague "Fake: 95%", TruthLens provides an itemized, court-admissible forensic breakdown with exact mathematical proofs, highlighted bounding boxes, and transparent point weights.
           </p>
         </div>
         <div class="cyber-card border-teal">
-          <h3 class="card-title" style="color: var(--neon);">2. Dual Mathematical Rigor</h3>
+          <h3 class="card-title" style="color: var(--neon);">2. Blockchain-Style Cryptographic Ledger</h3>
           <p style="font-size: 0.95rem; color: var(--muted); line-height: 1.5;">
-            Combines UIDAI Verhoeff D5 dihedral group permutations for Indian national IDs with ICAO Doc 9303 cyclic 7-3-1 weighting checksums for international passports.
+            Sequential SHA-256 hash-chaining anchored at Genesis Block #0 guarantees mathematical immutability and exposes internal database tampering in milliseconds.
           </p>
         </div>
         <div class="cyber-card border-teal">
-          <h3 class="card-title" style="color: var(--neon);">3. 100% Local Deployment</h3>
+          <h3 class="card-title" style="color: var(--neon);">3. DPDP Act 2023 Data Minimization</h3>
           <p style="font-size: 0.95rem; color: var(--muted); line-height: 1.5;">
-            Zero cloud dependencies. Eliminates the critical security and legal vulnerability of transmitting citizens' biometric data to external commercial cloud APIs.
+            Implements presentation-layer masking ('XXXX XXXX 9012') on all overview displays while unlocking complete forensic records for active officer inspection.
           </p>
         </div>
         <div class="cyber-card border-teal">
-          <h3 class="card-title" style="color: var(--neon);">4. Sub-2-Second High Throughput</h3>
+          <h3 class="card-title" style="color: var(--neon);">4. 100% Local-First Edge Deployment</h3>
           <p style="font-size: 0.95rem; color: var(--muted); line-height: 1.5;">
-            Executes the complete 7-step pipeline in under 1.8 seconds per traveler, allowing border authorities to screen high-volume passenger traffic without queue delays.
+            Executes the complete 7-step pipeline in under 1.5 seconds per traveler without transmitting sensitive citizen biometrics to external commercial cloud APIs.
           </p>
         </div>
       </div>

@@ -35,9 +35,11 @@
   const livePreviewImg = document.getElementById('live-preview-img');
   const btnClearLive = document.getElementById('btn-clear-live');
 
-  // Webcam Elements
+  // Webcam & Mode Elements
   const btnModeUpload = document.getElementById('btn-mode-upload');
   const btnModeWebcam = document.getElementById('btn-mode-webcam');
+  const panelLiveUpload = document.getElementById('panel-live-upload');
+  const panelLiveWebcam = document.getElementById('panel-live-webcam');
   const webcamContainer = document.getElementById('webcam-container');
   const webcamVideo = document.getElementById('webcam-video');
   const btnWebcamSnap = document.getElementById('btn-webcam-snap');
@@ -57,6 +59,9 @@
   const btnQuickScenario3 = document.getElementById('btn-quick-scenario-3');
   const btnQuickScenario4 = document.getElementById('btn-quick-scenario-4');
   const btnQuickScenario5 = document.getElementById('btn-quick-scenario-5');
+  const btnQuickScenario6 = document.getElementById('btn-quick-scenario-6');
+  const btnQuickScenario7 = document.getElementById('btn-quick-scenario-7');
+  const btnQuickScenario8 = document.getElementById('btn-quick-scenario-8');
 
   // Certificate Modal
   const certModal = document.getElementById('certificate-modal');
@@ -86,6 +91,7 @@
     // Lazy load data for specific tabs
     if (tabId === 'tab-dashboard') loadDashboardStats();
     if (tabId === 'tab-history') loadHistory();
+    if (tabId === 'tab-audit') loadAuditChain();
     if (tabId === 'tab-mockdb') loadMockDatabase();
   }
 
@@ -96,6 +102,17 @@
   // =========================================================================
   // 2. DOCUMENT UPLOAD & DRAG-AND-DROP
   // =========================================================================
+  // Document Dropzone & Clear Logic
+  function clearDocUpload() {
+    docFile = null;
+    docBase64 = null;
+    docFileInput.value = '';
+    docPreviewImg.src = '';
+    docPreviewBox.classList.add('hidden');
+    docDropzoneContent.classList.remove('hidden');
+    docDropzone.classList.remove('has-preview');
+  }
+
   function handleDocFileSelect(file) {
     if (!file) return;
     docFile = file;
@@ -105,12 +122,16 @@
       docPreviewImg.src = docBase64;
       docPreviewBox.classList.remove('hidden');
       docDropzoneContent.classList.add('hidden');
+      docDropzone.classList.add('has-preview');
     };
     reader.readAsDataURL(file);
   }
 
   docDropzone.addEventListener('click', (e) => {
-    if (e.target !== btnClearDoc) docFileInput.click();
+    // Prevent triggering file dialog when cancel button or active preview is clicked
+    if (e.target.closest('#btn-clear-doc')) return;
+    if (!docPreviewBox.classList.contains('hidden')) return;
+    docFileInput.click();
   });
 
   docFileInput.addEventListener('change', (e) => {
@@ -131,17 +152,25 @@
   });
 
   btnClearDoc.addEventListener('click', (e) => {
+    e.preventDefault();
     e.stopPropagation();
-    docFile = null;
-    docBase64 = null;
-    docFileInput.value = '';
-    docPreviewBox.classList.add('hidden');
-    docDropzoneContent.classList.remove('hidden');
+    e.stopImmediatePropagation();
+    clearDocUpload();
   });
 
   // =========================================================================
   // 3. LIVE PASSENGER PHOTO & WEBCAM
   // =========================================================================
+  function clearLiveUpload() {
+    liveFile = null;
+    liveBase64 = null;
+    liveFileInput.value = '';
+    livePreviewImg.src = '';
+    livePreviewBox.classList.add('hidden');
+    liveDropzoneContent.classList.remove('hidden');
+    liveDropzone.classList.remove('has-preview');
+  }
+
   function handleLiveFileSelect(file) {
     if (!file) return;
     liveFile = file;
@@ -151,12 +180,15 @@
       livePreviewImg.src = liveBase64;
       livePreviewBox.classList.remove('hidden');
       liveDropzoneContent.classList.add('hidden');
+      liveDropzone.classList.add('has-preview');
     };
     reader.readAsDataURL(file);
   }
 
   liveDropzone.addEventListener('click', (e) => {
-    if (e.target !== btnClearLive) liveFileInput.click();
+    if (e.target.closest('#btn-clear-live')) return;
+    if (!livePreviewBox.classList.contains('hidden')) return;
+    liveFileInput.click();
   });
 
   liveFileInput.addEventListener('change', (e) => {
@@ -177,43 +209,45 @@
   });
 
   btnClearLive.addEventListener('click', (e) => {
+    e.preventDefault();
     e.stopPropagation();
-    liveFile = null;
-    liveBase64 = null;
-    liveFileInput.value = '';
-    livePreviewBox.classList.add('hidden');
-    liveDropzoneContent.classList.remove('hidden');
+    e.stopImmediatePropagation();
+    clearLiveUpload();
   });
 
-  // Webcam Toggle
-  btnModeWebcam.addEventListener('click', async () => {
-    btnModeWebcam.classList.add('active');
-    btnModeUpload.classList.remove('active');
-    liveDropzone.classList.add('hidden');
-    webcamContainer.classList.remove('hidden');
-
-    try {
-      webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-      webcamVideo.srcObject = webcamStream;
-    } catch (err) {
-      alert('Unable to access camera: ' + err.message + '. Please ensure permissions are granted.');
-      btnModeUpload.click();
-    }
-  });
-
+  // Live Mode Toggle (Upload Photo vs Use Live Camera)
   function stopWebcam() {
     if (webcamStream) {
       webcamStream.getTracks().forEach(t => t.stop());
       webcamStream = null;
+    }
+    if (webcamVideo) {
+      webcamVideo.srcObject = null;
     }
   }
 
   btnModeUpload.addEventListener('click', () => {
     btnModeUpload.classList.add('active');
     btnModeWebcam.classList.remove('active');
-    webcamContainer.classList.add('hidden');
-    liveDropzone.classList.remove('hidden');
+    if (panelLiveUpload) panelLiveUpload.classList.remove('hidden');
+    if (panelLiveWebcam) panelLiveWebcam.classList.add('hidden');
     stopWebcam();
+  });
+
+  btnModeWebcam.addEventListener('click', async () => {
+    btnModeWebcam.classList.add('active');
+    btnModeUpload.classList.remove('active');
+    if (panelLiveUpload) panelLiveUpload.classList.add('hidden');
+    if (panelLiveWebcam) panelLiveWebcam.classList.remove('hidden');
+
+    try {
+      webcamStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      webcamVideo.srcObject = webcamStream;
+      webcamVideo.play().catch(() => {});
+    } catch (err) {
+      alert('Unable to access live webcam: ' + err.message + '\nSwitching back to photo file upload.');
+      btnModeUpload.click();
+    }
   });
 
   btnWebcamCancel.addEventListener('click', () => {
@@ -233,6 +267,7 @@
     livePreviewImg.src = liveBase64;
     livePreviewBox.classList.remove('hidden');
     liveDropzoneContent.classList.add('hidden');
+    liveDropzone.classList.add('has-preview');
 
     btnModeUpload.click();
   });
@@ -249,21 +284,33 @@
       docTypeSelect.value = 'PASSPORT';
       await loadSampleIntoIntake('demo_passport_genuine', 'demo_person_live_match');
     } else if (scenarioNumber === 2) {
-      // Scenario 2: Expired Visa (Watchlist Alert)
-      docTypeSelect.value = 'VISA';
-      await loadSampleIntoIntake('demo_visa_expired', null);
-    } else if (scenarioNumber === 3) {
-      // Scenario 3: Tampered Passport + Impersonation
+      // Scenario 2: Tampered Passport + Impersonation
       docTypeSelect.value = 'PASSPORT';
       await loadSampleIntoIntake('demo_passport_tampered', 'demo_person_live_mismatch');
+    } else if (scenarioNumber === 3) {
+      // Scenario 3: Genuine Visa (Valid Stay & Window)
+      docTypeSelect.value = 'VISA';
+      await loadSampleIntoIntake('demo_visa_genuine', null);
     } else if (scenarioNumber === 4) {
-      // Scenario 4: Genuine Aadhaar (QR Verified)
+      // Scenario 4: Expired Visa (Watchlist Alert)
+      docTypeSelect.value = 'VISA';
+      await loadSampleIntoIntake('demo_visa_expired', null);
+    } else if (scenarioNumber === 5) {
+      // Scenario 5: Genuine Aadhaar (Verhoeff Checksum)
       docTypeSelect.value = 'AADHAAR';
       await loadSampleIntoIntake('sample_genuine_aadhaar', null);
-    } else if (scenarioNumber === 5) {
-      // Scenario 5: Tampered Name Aadhaar (QR Forgery Alert)
+    } else if (scenarioNumber === 6) {
+      // Scenario 6: Tampered Aadhaar (Name vs QR Mismatch)
       docTypeSelect.value = 'AADHAAR';
       await loadSampleIntoIntake('sample_tampered_name_aadhaar', null);
+    } else if (scenarioNumber === 7) {
+      // Scenario 7: Genuine PAN Card (ITD Entity Code)
+      docTypeSelect.value = 'PAN';
+      await loadSampleIntoIntake('sample_genuine_pan', null);
+    } else if (scenarioNumber === 8) {
+      // Scenario 8: Tampered PAN Card (Photo Splice & QR Conflict)
+      docTypeSelect.value = 'PAN';
+      await loadSampleIntoIntake('sample_tampered_pan', null);
     }
 
     // Auto-initiate screening
@@ -290,11 +337,15 @@
   if (btnQuickScenario3) btnQuickScenario3.addEventListener('click', () => triggerDemoScenario(3));
   if (btnQuickScenario4) btnQuickScenario4.addEventListener('click', () => triggerDemoScenario(4));
   if (btnQuickScenario5) btnQuickScenario5.addEventListener('click', () => triggerDemoScenario(5));
+  if (btnQuickScenario6) btnQuickScenario6.addEventListener('click', () => triggerDemoScenario(6));
+  if (btnQuickScenario7) btnQuickScenario7.addEventListener('click', () => triggerDemoScenario(7));
+  if (btnQuickScenario8) btnQuickScenario8.addEventListener('click', () => triggerDemoScenario(8));
 
   // Reset Button
   btnResetForm.addEventListener('click', () => {
-    btnClearDoc.click();
-    btnClearLive.click();
+    clearDocUpload();
+    clearLiveUpload();
+    btnModeUpload.click();
     docTypeSelect.value = 'AUTO';
     const docNumInp = document.getElementById('doc-number-input');
     if (docNumInp) docNumInp.value = '';
@@ -949,6 +1000,28 @@
       });
     }
 
+    // Officer Summary (Plain-Language Explainability Engine)
+    const officerSummaryElem = document.getElementById('dossier-officer-summary');
+    const sourceBadgeElem = document.getElementById('dossier-summary-source-badge');
+    
+    const summaryText = data.officer_summary || (data.dossier && data.dossier.officer_summary) || data.summary || 'Clearance evaluation completed.';
+    if (officerSummaryElem) {
+      officerSummaryElem.textContent = summaryText;
+    }
+
+    if (sourceBadgeElem) {
+      const meta = data.officer_summary_meta || (data.dossier && data.dossier.officer_summary_meta);
+      if (meta && (meta.source === 'cloud_neural_engine' || (meta.source && meta.source.toUpperCase().includes('HUGGINGFACE')))) {
+        sourceBadgeElem.textContent = '⚡ CLOUD AUGMENTED';
+        sourceBadgeElem.className = 'ai-source-badge badge-cloud';
+        sourceBadgeElem.title = `Cloud Neural Engine (${meta.model || 'Neural Model'})`;
+      } else {
+        sourceBadgeElem.textContent = '🔒 LOCAL-FIRST PRIVACY ENGINE';
+        sourceBadgeElem.className = 'ai-source-badge badge-local';
+        sourceBadgeElem.title = 'Air-Gapped Sovereign Engine (Zero Cloud Latency / Data Privacy Protected)';
+      }
+    }
+
     const officerRec = document.getElementById('dossier-officer-rec');
     if (officerRec) {
       officerRec.textContent = data.officer_recommendation || 'Proceed according to standard border control clearance rules.';
@@ -1041,8 +1114,45 @@
   }
 
   // =========================================================================
-  // 9. SCREENING HISTORY TABLE
+  // 9. SCREENING HISTORY TABLE & PRIVACY MASKING (DPDP ACT 2023)
   // =========================================================================
+
+  /**
+   * Data-Minimization & Masking Utility (Government-grade Privacy Standard)
+   * Masks document numbers at list level: preserves last 4 alphanumeric characters
+   * and masks the rest with 'X', keeping formatting intact.
+   * e.g., Aadhaar "1234 5678 9012" -> "XXXX XXXX 9012"
+   *       Passport "L898902C3" -> "XXXXX02C3"
+   *       PAN "ABCPS1234F" -> "XXXXXX234F"
+   */
+  function maskDocumentNumber(docNum, docType) {
+    if (!docNum || docNum === 'N/A' || docNum === 'Not Detected' || docNum === 'UNSPECIFIED') {
+      return 'N/A';
+    }
+    const str = String(docNum).trim();
+    if (str.length <= 4) return str;
+
+    // Special clean handling for Aadhaar 12-digit format
+    const digitsOnly = str.replace(/\D/g, '');
+    if (digitsOnly.length === 12 || (docType && String(docType).toUpperCase().includes('AADHAAR'))) {
+      const last4 = digitsOnly.slice(-4);
+      return `XXXX XXXX ${last4}`;
+    }
+
+    // General format (Passport, PAN, DL, Visa): mask preceding alphanumeric chars, keep last 4
+    let visibleCount = 0;
+    const chars = str.split('');
+    for (let i = chars.length - 1; i >= 0; i--) {
+      if (/[a-zA-Z0-9]/.test(chars[i])) {
+        visibleCount++;
+        if (visibleCount > 4) {
+          chars[i] = 'X';
+        }
+      }
+    }
+    return chars.join('');
+  }
+
   async function loadHistory() {
     const tbody = document.getElementById('history-tbody');
     try {
@@ -1061,16 +1171,20 @@
       rows.forEach(r => {
         const tr = document.createElement('tr');
         const badgeClass = r.verdict.includes('VERIFIED') ? 'badge-green' : (r.verdict.includes('REVIEW') ? 'badge-yellow' : 'badge-red');
+        const maskedDocNum = maskDocumentNumber(r.doc_number, r.doc_type);
+
         tr.innerHTML = `
-          <td><strong style="font-family: var(--font-mono); font-size: 0.82rem;">${r.screening_id}</strong></td>
+          <td><strong style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--teal-neon);">${r.screening_id}</strong></td>
           <td style="font-size: 0.8rem; color: var(--text-dim);">${r.timestamp}</td>
           <td><span class="badge-tech">${r.doc_type}</span></td>
-          <td><strong>${r.person_name || 'N/A'}</strong></td>
-          <td style="font-family: var(--font-mono);">${r.doc_number || 'N/A'}</td>
-          <td style="font-family: var(--font-tech); font-weight: bold;">${r.risk_score}</td>
+          <td><strong style="color: #ffffff; font-size: 0.88rem;">${r.person_name || 'N/A'}</strong></td>
+          <td title="Masked for Privacy (DPDP Act 2023 Compliance)">
+            <span class="masked-doc-badge">${maskedDocNum}</span>
+          </td>
+          <td style="font-family: var(--font-tech); font-weight: bold; font-size: 0.95rem; text-align: center;">${r.risk_score}</td>
           <td><span class="${badgeClass}">${r.verdict}</span></td>
-          <td>
-            <button type="button" class="cyber-btn btn-secondary btn-sm btn-view-history-record" data-id="${r.screening_id}">
+          <td style="text-align: center;">
+            <button type="button" class="cyber-btn btn-secondary btn-sm btn-view-history-record" data-id="${r.screening_id}" title="Inspect full unmasked forensic dossier">
               Inspect
             </button>
           </td>
@@ -1078,7 +1192,7 @@
         tbody.appendChild(tr);
       });
 
-      // Bind inspection buttons
+      // Bind inspection buttons: reveal full unmasked master dossier
       document.querySelectorAll('.btn-view-history-record').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.dataset.id;
@@ -1087,7 +1201,17 @@
             const rep = await repRes.json();
             currentReport = rep;
             renderScreeningResults(rep);
-            switchTab('tab-risk');
+            renderMasterDossier(rep);
+            const dossierWrapper = document.getElementById('master-dossier-wrapper');
+            if (dossierWrapper) {
+              dossierWrapper.classList.remove('hidden');
+            }
+            switchTab('tab-screening');
+            setTimeout(() => {
+              if (dossierWrapper) {
+                dossierWrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            }, 120);
           }
         });
       });
@@ -1099,6 +1223,26 @@
 
   const btnRefreshHistory = document.getElementById('btn-refresh-history');
   if (btnRefreshHistory) btnRefreshHistory.addEventListener('click', loadHistory);
+
+  const btnClearHistory = document.getElementById('btn-clear-history');
+  if (btnClearHistory) {
+    btnClearHistory.addEventListener('click', async () => {
+      if (!confirm('Are you sure you want to clear all screening audit logs?')) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/history/clear', { method: 'POST' });
+        if (res.ok) {
+          if (typeof showNotification === 'function') {
+            showNotification('Screening audit logs cleared successfully.', 'info');
+          }
+          loadHistory();
+        }
+      } catch (err) {
+        console.error('Failed to clear history:', err);
+      }
+    });
+  }
 
   // =========================================================================
   // 10. MOCK DATABASE VIEWER
@@ -1174,6 +1318,162 @@
       localStorage.removeItem('truthlens_token');
       localStorage.removeItem('truthlens_user');
       window.location.href = '/login';
+    });
+  }
+
+  // =========================================================================
+  // CRYPTOGRAPHIC AUDIT INTEGRITY (HASH-CHAINING)
+  // =========================================================================
+  const auditKpiTotal = document.getElementById('audit-kpi-total');
+  const auditKpiStatus = document.getElementById('audit-kpi-status');
+  const auditKpiStatusMeta = document.getElementById('audit-kpi-status-meta');
+  const auditKpiStatusIcon = document.getElementById('audit-kpi-status-icon');
+  const btnVerifyAuditChain = document.getElementById('btn-verify-audit-chain');
+  const btnRefreshAuditChain = document.getElementById('btn-refresh-audit-chain');
+  const auditBanner = document.getElementById('audit-verification-banner');
+  const auditBannerIcon = document.getElementById('audit-banner-icon');
+  const auditBannerTitle = document.getElementById('audit-banner-title');
+  const auditBannerDesc = document.getElementById('audit-banner-desc');
+  const hashChainVisualList = document.getElementById('hash-chain-visual-list');
+
+  async function loadAuditChain() {
+    if (!hashChainVisualList) return;
+    try {
+      const res = await fetch('/api/audit/chain?limit=50');
+      if (!res.ok) throw new Error('Failed to fetch audit chain records');
+      const data = await res.json();
+      const records = data.chain || [];
+      const total = data.total_records !== undefined ? data.total_records : records.length;
+
+      if (auditKpiTotal) auditKpiTotal.textContent = total;
+
+      if (records.length === 0) {
+        hashChainVisualList.innerHTML = `
+          <div class="hash-chain-empty">
+            <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem;">⛓️</span>
+            <strong>Cryptographic Audit Ledger Initialized</strong>
+            <p style="margin-top: 0.25rem; font-size: 0.85rem; color: #64748b;">No screening transactions recorded yet. Complete a screening to append the first block to the cryptographic chain.</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Render chain with Genesis block followed by each transaction block
+      let html = `
+        <div class="hash-chain-node genesis" title="Genesis Root Anchor Block (Immutable Root of Trust)">
+          <div class="node-badge">GENESIS ANCHOR</div>
+          <div class="node-id">Block #0</div>
+          <div class="node-hash"><span class="hash-label">HASH:</span> <code class="code-hash">00000000...</code></div>
+          <div class="node-prev"><span class="hash-label">PREV:</span> <code class="code-prev">N/A (Anchor)</code></div>
+          <div class="node-meta">Root of Trust</div>
+        </div>
+      `;
+
+      records.forEach((block) => {
+        const maskedDocNum = (block.doc_number && block.doc_number !== 'N/A' && block.doc_number !== 'Not Detected' && block.doc_number !== 'UNSPECIFIED')
+          ? maskDocumentNumber(block.doc_number, block.doc_type)
+          : '';
+        const docBadgeHtml = maskedDocNum
+          ? `<div class="node-doc-summary" style="margin-top: 0.35rem; font-size: 0.76rem; color: #94a3b8;"><span style="color: var(--teal-neon);">${block.doc_type || 'DOC'}:</span> <span class="masked-doc-badge" style="font-size: 0.72rem; padding: 2px 6px;">${maskedDocNum}</span></div>`
+          : '';
+        const tooltipDocPart = maskedDocNum ? `Doc: ${maskedDocNum} (Masked)\n` : '';
+        const titleText = `Block #${block.id} | Screening: ${block.screening_id}\n` +
+          `Subject: ${block.person_name || 'N/A'}\n` +
+          tooltipDocPart +
+          `Full Hash: ${block.record_hash}\n` +
+          `Previous: ${block.previous_hash}`;
+
+        html += `
+          <div class="hash-chain-connector">
+            <span class="chain-link-icon">⛓️</span>
+            <span class="chain-arrow">➔</span>
+          </div>
+          <div class="hash-chain-node" title="${titleText}">
+            <div class="node-badge">BLOCK #${block.id}</div>
+            <div class="node-id">${block.screening_id}</div>
+            <div class="node-hash">
+              <span class="hash-label">HASH:</span> <code class="code-hash">${block.short_hash}...</code>
+            </div>
+            <div class="node-prev">
+              <span class="hash-label">PREV:</span> <code class="code-prev">${block.short_prev_hash}...</code>
+            </div>
+            ${docBadgeHtml}
+            <div class="node-meta">${block.timestamp}</div>
+          </div>
+        `;
+      });
+
+      hashChainVisualList.innerHTML = html;
+    } catch (err) {
+      console.error('Audit chain loading error:', err);
+      if (hashChainVisualList) {
+        hashChainVisualList.innerHTML = `<div class="hash-chain-empty error">Failed to load audit chain: ${err.message}</div>`;
+      }
+    }
+  }
+
+  async function verifyAuditChain() {
+    if (!btnVerifyAuditChain || !auditBanner) return;
+    const originalText = btnVerifyAuditChain.innerHTML;
+    btnVerifyAuditChain.innerHTML = '<span class="btn-icon">⏳</span> Auditing SHA-256 Ledger...';
+    btnVerifyAuditChain.disabled = true;
+
+    try {
+      const res = await fetch('/api/audit/verify');
+      const data = await res.json();
+
+      if (data.valid) {
+        // Verified state
+        auditBanner.className = 'audit-banner success';
+        if (auditBannerIcon) auditBannerIcon.textContent = '✅';
+        if (auditBannerTitle) auditBannerTitle.textContent = 'Cryptographic Ledger Verified — No Tampering Detected';
+        if (auditBannerDesc) {
+          auditBannerDesc.textContent = `${data.total_records} chained record(s) cryptographically audited. All SHA-256 digests and previous-hash pointers are 100% intact.`;
+        }
+        if (auditKpiStatus) {
+          auditKpiStatus.textContent = 'VERIFIED';
+          auditKpiStatus.style.color = '#10b981';
+        }
+        if (auditKpiStatusMeta) auditKpiStatusMeta.textContent = 'Cryptographic integrity 100%';
+        if (auditKpiStatusIcon) auditKpiStatusIcon.textContent = '🛡️';
+      } else {
+        // Tampered / Corrupted state
+        auditBanner.className = 'audit-banner error';
+        if (auditBannerIcon) auditBannerIcon.textContent = '❌';
+        if (auditBannerTitle) {
+          auditBannerTitle.textContent = `Tampering Detected at Record #${data.broken_at || '?'}`;
+        }
+        if (auditBannerDesc) {
+          auditBannerDesc.textContent = `${data.reason || 'Cryptographic digest mismatch detected in persistent storage.'}`;
+        }
+        if (auditKpiStatus) {
+          auditKpiStatus.textContent = 'TAMPERED';
+          auditKpiStatus.style.color = '#f43f5e';
+        }
+        if (auditKpiStatusMeta) {
+          auditKpiStatusMeta.textContent = `Alert: Broken at block #${data.broken_at}`;
+        }
+        if (auditKpiStatusIcon) auditKpiStatusIcon.textContent = '⚠️';
+      }
+      // Refresh chain blocks to update state
+      await loadAuditChain();
+    } catch (err) {
+      console.error('Audit verification request failed:', err);
+      auditBanner.className = 'audit-banner error';
+      if (auditBannerTitle) auditBannerTitle.textContent = 'Audit Verification Network Error';
+      if (auditBannerDesc) auditBannerDesc.textContent = err.message;
+    } finally {
+      btnVerifyAuditChain.innerHTML = originalText;
+      btnVerifyAuditChain.disabled = false;
+    }
+  }
+
+  if (btnVerifyAuditChain) {
+    btnVerifyAuditChain.addEventListener('click', verifyAuditChain);
+  }
+  if (btnRefreshAuditChain) {
+    btnRefreshAuditChain.addEventListener('click', () => {
+      loadAuditChain();
     });
   }
 

@@ -90,11 +90,14 @@ def generate_heatmap_and_anomalies(
     # Apply Jet ColorMap: Deep Blue = low error / uniform compression; Yellow/Red = high error / edited
     heatmap_bgr = cv2.applyColorMap(diff_amplified, cv2.COLORMAP_JET)
 
-    # Regional 2D anomaly detection via local sliding window:
-    # A genuine document has low recompression error (< 1.0) across all regions.
-    # A spliced element (photo or pasted patch) exhibits sustained elevated error across a 2D block.
+    # Dynamically measure unedited substrate noise floor from lower-to-mid distribution of diff_gray
+    p70 = float(np.percentile(diff_gray, 70))
+    sub_pixels = diff_gray[diff_gray <= p70]
+    substrate_floor = max(0.20, float(np.mean(sub_pixels)) if len(sub_pixels) > 0 else mean_diff)
+
+    # Derived dynamically from measured substrate noise floor rather than hardcoded 3.2 floor
+    anomaly_thresh_val = max(mean_diff * 2.6, substrate_floor * 3.2, 2.1)
     local_mean = cv2.boxFilter(diff_gray.astype(np.float32), -1, (35, 35))
-    anomaly_thresh_val = max(mean_diff * 3.0, 3.2)
     anomaly_mask = (local_mean >= anomaly_thresh_val).astype(np.uint8) * 255
 
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
@@ -123,7 +126,7 @@ def generate_heatmap_and_anomalies(
                 continue
 
             reg_mean = float(np.mean(diff_gray[y:y+ch, x:x+cw]))
-            if reg_mean >= 3.0:
+            if reg_mean >= max(anomaly_thresh_val * 0.85, 2.0):
                 anomaly_regions.append({
                     "x": int(x), "y": int(y), "w": int(cw), "h": int(ch),
                     "area": int(area), "mean": round(reg_mean, 2)
@@ -199,22 +202,95 @@ def analyze_stamp_forgery(original_bgr: np.ndarray) -> Dict[str, Any]:
     }
 
 
+def estimate_photo_slot(
+    h_img: int,
+    w_img: int,
+    face_bbox: Optional[Tuple[int, int, int, int]] = None,
+    cv_img: Optional[np.ndarray] = None
+) -> Tuple[int, int, int, int]:
+    """
+    Expands detected inner facial landmarks to the full ID-card photo-slot size,
+    or detects the photo slot boundary directly if a distinct boundary is present.
+    """
+    # 1. Direct photo slot boundary contour detection if cv_img is available
+    if cv_img is not None:
+        try:
+            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+            if face_bbox:
+                fx, fy, fw, fh = face_bbox
+                cx = fx + fw // 2
+                cy = fy + fh // 2
+            else:
+                cx, cy = int(w_img * 0.15), int(h_img * 0.45)
+
+            search_x1 = max(0, cx - int(w_img * 0.18))
+            search_y1 = max(0, cy - int(h_img * 0.28))
+            search_x2 = min(w_img, cx + int(w_img * 0.18))
+            search_y2 = min(h_img, cy + int(h_img * 0.30))
+
+            roi_gray = gray[search_y1:search_y2, search_x1:search_x2]
+            _, thresh = cv2.threshold(roi_gray, 240, 255, cv2.THRESH_BINARY_INV)
+            contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            min_area = (h_img * w_img) * 0.02
+            max_area = (h_img * w_img) * 0.16
+            for cnt in contours:
+                area = cv2.contourArea(cnt)
+                if min_area <= area <= max_area:
+                    rx, ry, rw, rh = cv2.boundingRect(cnt)
+                    aspect = rw / max(1, rh)
+                    if 0.55 <= aspect <= 1.2:
+                        gx, gy = search_x1 + rx, search_y1 + ry
+                        if gx <= cx <= gx + rw and gy <= cy <= gy + rh:
+                            return (gx, gy, rw, rh)
+        except Exception:
+            pass
+
+    # 2. Anthropometric aspect-ratio expansion based on standard ID card / passport framing
+    if not face_bbox:
+        pw = int(w_img * 0.205)
+        ph = int(pw / 0.78)
+        px = int(w_img * 0.05)
+        py = int(h_img * 0.22)
+        return (px, py, pw, ph)
+
+    fx, fy, fw, fh = face_bbox
+    if fw >= int(w_img * 0.18) and fh >= int(h_img * 0.35):
+        if fw > int(w_img * 0.24):
+            fw = int(w_img * 0.205)
+            fh = int(fw / 0.78)
+        return (fx, fy, fw, fh)
+
+    cx = fx + fw / 2.0
+    cy = fy + fh * 0.45
+
+    # Standard ID photo ratio 35mm x 45mm (~0.78)
+    pw = max(int(fw * 1.75), int(w_img * 0.19))
+    ph = max(int(fh * 1.75), int(pw / 0.78))
+
+    px = max(0, int(cx - pw / 2.0))
+    py = max(0, int(cy - ph * 0.42))
+    pw = min(pw, w_img - px)
+    ph = min(ph, h_img - py)
+    return (px, py, pw, ph)
+
+
 def analyze_photo_splice(
     diff_gray: np.ndarray,
     cv_img: Optional[np.ndarray] = None,
     face_bbox: Optional[Tuple[int, int, int, int]] = None
-) -> Tuple[bool, float, str]:
+) -> Tuple[bool, float, str, Tuple[int, int, int, int]]:
     """
     Compares the ELA recompression error rate & high-frequency noise variance
-    inside the facial portrait region against the surrounding card substrate.
-    If the face region has significantly higher/lower compression error or incompatible
-    sensor noise, it indicates a digital photo replacement splice.
+    inside the expanded photo slot against the surrounding card substrate.
+    Also evaluates boundary seam edge gradient discontinuity along the photo perimeter.
     """
     if not face_bbox:
-        return False, 0.0, "No face bounding box provided for splice audit."
+        return False, 0.0, "No face bounding box provided for splice audit.", (0, 0, 0, 0)
 
-    x, y, w, h = face_bbox
     h_img, w_img = diff_gray.shape[:2]
+    slot_bbox = estimate_photo_slot(h_img, w_img, face_bbox, cv_img=cv_img)
+    x, y, w, h = slot_bbox
 
     # Constrain to bounds
     x = max(0, min(x, w_img - 1))
@@ -244,9 +320,39 @@ def analyze_photo_splice(
         bg_mask[y:y+h, x:x+w] = False
         bg_mean = float(np.mean(diff_gray[bg_mask]))
 
-    ratio = face_mean / max(0.1, bg_mean)
-    # A genuine digital splice shows distinct localized compression divergence
-    is_spliced = (ratio > 2.85 and face_mean > 3.0) or (ratio < 0.25 and bg_mean > 4.5)
+    # Prevent small-denominator inflation on ultra-clean flat white card substrate
+    bg_ref = max(0.55, bg_mean)
+    ratio = face_mean / bg_ref
+
+    # Seam / boundary edge gradient check along the photo perimeter
+    seam_mask = np.zeros_like(diff_gray, dtype=bool)
+    sy1 = max(0, y - 2)
+    sy2 = min(h_img, y + h + 2)
+    sx1 = max(0, x - 2)
+    sx2 = min(w_img, x + w + 2)
+    seam_mask[sy1:sy2, sx1:sx2] = True
+    iy1 = min(h_img, y + 3)
+    iy2 = max(0, y + h - 3)
+    ix1 = min(w_img, x + 3)
+    ix2 = max(0, x + w - 3)
+    if iy2 > iy1 and ix2 > ix1:
+        seam_mask[iy1:iy2, ix1:ix2] = False
+    seam_mean = float(np.mean(diff_gray[seam_mask]))
+    seam_ratio = seam_mean / bg_ref
+
+    diff_float = diff_gray.astype(np.float32)
+    gx = cv2.Sobel(diff_float, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(diff_float, cv2.CV_32F, 0, 1, ksize=3)
+    grad_mag = np.sqrt(gx**2 + gy**2)
+    seam_grad = float(np.mean(grad_mag[seam_mask]))
+
+    seam_spliced = (seam_ratio > 2.2 and seam_mean > 1.2) or (seam_grad > 3.8 and seam_mean > 1.3)
+
+    # Splicing criteria:
+    # 1. Ratio > 2.15 with face error > 1.10 (elevated high-frequency recompression error in spliced patch)
+    # 2. Ratio > 2.60 with face error > 0.90
+    # 3. Ratio < 0.35 with background error > 0.40 (differentially pre-quantized patch)
+    is_spliced = (ratio > 2.15 and (face_mean > 1.10 or ratio > 2.60 or seam_spliced)) or (ratio < 0.35 and bg_mean > 0.40)
 
     # Check high-frequency noise disparity if cv_img is supplied
     noise_ratio = 1.0
@@ -259,18 +365,24 @@ def analyze_photo_splice(
             ref_mask = local_bg_mask if np.any(local_bg_mask) else bg_mask
             bg_noise = float(np.mean(noise[ref_mask]))
             noise_ratio = face_noise / max(0.1, bg_noise)
-            if (noise_ratio > 3.2 or noise_ratio < 0.25) and face_mean > 2.5:
+            if (noise_ratio > 2.6 or noise_ratio < 0.35) and face_mean > 0.80:
                 is_spliced = True
         except Exception:
             pass
 
-    explanation = (
-        f"Photo replacement splice detected: Portrait compression ratio ({round(ratio, 2)}x) "
-        f"and noise profile ({round(noise_ratio, 2)}x) conflict with document substrate."
-        if is_spliced else
-        f"Portrait compression ({round(ratio, 2)}x) is consistent with card surface."
-    )
-    return is_spliced, round(ratio, 2), explanation
+    reasons = []
+    if is_spliced:
+        reasons.append(
+            f"Photo replacement splice detected: Portrait compression ratio ({round(ratio, 2)}x) "
+            f"and noise profile ({round(noise_ratio, 2)}x) conflict with document substrate."
+        )
+        if seam_spliced:
+            reasons.append(f"Perimeter seam discontinuity detected along photo boundary (seam error {round(seam_mean, 2)}, ratio {round(seam_ratio, 2)}x).")
+        explanation = " ".join(reasons)
+    else:
+        explanation = f"Portrait compression ({round(ratio, 2)}x) is consistent with card surface."
+
+    return is_spliced, round(ratio, 2), explanation, slot_bbox
 
 
 def run_ela_forensic_analysis(
@@ -298,7 +410,7 @@ def run_ela_forensic_analysis(
     heatmap_bgr, overlay_bgr, anomalies, tamper_pct = generate_heatmap_and_anomalies(cv_img, diff_gray)
 
     # Photo splice check
-    photo_spliced, splice_ratio, splice_expl = analyze_photo_splice(diff_gray, cv_img=cv_img, face_bbox=face_bbox)
+    photo_spliced, splice_ratio, splice_expl, slot_bbox = analyze_photo_splice(diff_gray, cv_img=cv_img, face_bbox=face_bbox)
 
     # Stamp analysis (only relevant for Passports and Visas)
     if doc_type in ["PASSPORT", "VISA"]:
@@ -314,25 +426,27 @@ def run_ela_forensic_analysis(
     visual_tamper_boxes = []
 
     # 1. Annotate Spliced Photo on overlay image
-    if photo_spliced and face_bbox is not None:
-        fx, fy, fw, fh = face_bbox
-        cv2.rectangle(overlay_bgr, (fx, fy), (fx + fw, fy + fh), (0, 0, 255), 3)
-        cv2.rectangle(overlay_bgr, (fx, max(0, fy - 22)), (fx + min(fw, 240), fy), (0, 0, 255), -1)
-        cv2.putText(
-            overlay_bgr,
-            "ALERT: SPLICED PHOTO",
-            (fx + 5, fy - 6),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.42,
-            (255, 255, 255),
-            1,
-            cv2.LINE_AA
-        )
-        visual_tamper_boxes.append({
-            "type": "PHOTO_SPLICE",
-            "x": int(fx), "y": int(fy), "w": int(fw), "h": int(fh),
-            "label": "Spliced / Replaced Portrait"
-        })
+    if photo_spliced:
+        annot_box = slot_bbox if (slot_bbox and slot_bbox[2] > 0 and slot_bbox[3] > 0) else face_bbox
+        if annot_box is not None:
+            fx, fy, fw, fh = annot_box
+            cv2.rectangle(overlay_bgr, (fx, fy), (fx + fw, fy + fh), (0, 0, 255), 3)
+            cv2.rectangle(overlay_bgr, (fx, max(0, fy - 22)), (fx + min(fw, 240), fy), (0, 0, 255), -1)
+            cv2.putText(
+                overlay_bgr,
+                "ALERT: SPLICED PHOTO",
+                (fx + 5, fy - 6),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.42,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA
+            )
+            visual_tamper_boxes.append({
+                "type": "PHOTO_SPLICE",
+                "x": int(fx), "y": int(fy), "w": int(fw), "h": int(fh),
+                "label": "Spliced / Replaced Portrait"
+            })
 
     # 2. Add existing anomaly regions to visual tamper boxes
     for anom in anomalies:

@@ -477,33 +477,33 @@ def create_presentation():
         p_pts.font.color.rgb = col
 
     # =========================================================================
-    # SLIDE 8: MOCK WATCHLIST & LOCAL SQLITE AUDIT TRAIL
+    # SLIDE 8: CRYPTOGRAPHIC AUDIT LEDGER & DPDP ACT PRIVACY
     # =========================================================================
     s8 = prs.slides.add_slide(blank_layout)
-    add_slide_header(s8, "Mock Verification Database & SQLite Audit Trail")
+    add_slide_header(s8, "Cryptographic Audit Ledger & DPDP Act Data Privacy")
 
     c1 = s8.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(1.9), Inches(5.6), Inches(4.8))
     c1.fill.solid()
     c1.fill.fore_color.rgb = COLOR_CARD
-    c1.line.color.rgb = COLOR_YELLOW
+    c1.line.color.rgb = COLOR_NEON
     tf1 = c1.text_frame
     tf1.word_wrap = True
     p = tf1.paragraphs[0]
-    p.text = "Mock Border Verification Database"
+    p.text = "Tamper-Proof Audit Chain (Hash-Chaining)"
     p.font.size = Pt(17)
     p.font.bold = True
-    p.font.color.rgb = COLOR_YELLOW
+    p.font.color.rgb = COLOR_NEON
 
     db_points = [
-        ("Simulated Border Watchlists", "Pre-seeded SQLite table storing mock watchlists for testing without accessing classified government databases."),
-        ("Interpol Red Notices", "Simulated international notices (e.g. Vikram Mehta, Passport L898902C3)."),
-        ("Stolen Passport Stock (SLTD)", "Alerts for reported lost or stolen passport series."),
-        ("Overstay & Revocation Registry", "Flagged tourist visas with expired stay duration limits (e.g. Maria Gonzalez, Visa V9284710)."),
-        ("Ethical Disclaimer", "Prominently labeled on every dashboard screen: 'DEMO DATA – NOT CONNECTED TO GOVERNMENT DATABASES'.")
+        ("Sequential SHA-256 Hashing", "Each block cryptographically binds data_snapshot + previous_hash + timestamp."),
+        ("Immutable Genesis Anchor", "Block #0 rooted at a fixed 64-char genesis digest ('0'*64) for mathematical trust."),
+        ("Continuous Ledger Verifier", "Zero-trust engine (/api/audit/verify) recomputes and validates entire chain in milliseconds."),
+        ("Insider Tamper Detection", "Direct SQLite alterations immediately fail verification and flag the exact corrupted record ID."),
+        ("Visual Block Explorer", "Interactive UI renders sequential linked cards with short hashes and masked summaries.")
     ]
     for title, desc in db_points:
         p_t = tf1.add_paragraph()
-        p_t.text = f"🗄️ {title}: "
+        p_t.text = f"⛓️ {title}: "
         p_t.font.bold = True
         p_t.font.size = Pt(12)
         p_t.font.color.rgb = COLOR_WHITE
@@ -519,20 +519,21 @@ def create_presentation():
     tf2 = c2.text_frame
     tf2.word_wrap = True
     p = tf2.paragraphs[0]
-    p.text = "Persistent SQLite Audit Trail"
+    p.text = "DPDP Act 2023 Data Minimization"
     p.font.size = Pt(17)
     p.font.bold = True
-    p.font.color.rgb = COLOR_NEON
+    p.font.color.rgb = COLOR_TEAL
 
     hist_points = [
-        ("Immutable Screening Logs", "Stores every single passenger screening transaction locally with unique ID (e.g. TL-20260903-XXXX)."),
-        ("Full JSON Payload Preservation", "Retains complete OCR field matrices, ELA metrics, face match scores, and factor audit trails."),
-        ("Historical Report Inspection", "Security supervisors can search past screenings by date, passenger name, document number, or risk tier."),
-        ("Printable PDF Certificate", "1-click generation of formatted official Border Security Forensic Certificate for legal evidence.")
+        ("Display-Layer Masking", "History list masks document numbers (e.g. 'XXXX XXXX 9012', 'XXXXX02C3', 'XXXXXX234F')."),
+        ("Subject Name Preserved", "Passenger names remain visible in table for rapid border officer identification."),
+        ("Active Officer Inspection", "Clicking 'Inspect' reveals full unmasked dossier for active case adjudication."),
+        ("Cryptographic Invariant Intact", "Underlying stored records and SHA-256 hash snapshots remain unmasked and valid."),
+        ("100% Local-First Edge Privacy", "Zero citizen biometrics or credentials transmitted to external commercial cloud APIs.")
     ]
     for title, desc in hist_points:
         p_t = tf2.add_paragraph()
-        p_t.text = f"🕒 {title}: "
+        p_t.text = f"🔒 {title}: "
         p_t.font.bold = True
         p_t.font.size = Pt(12)
         p_t.font.color.rgb = COLOR_WHITE
@@ -548,11 +549,11 @@ def create_presentation():
     add_slide_header(s9, "Live Demo Scenarios for SIH Hackathon Judges")
 
     demo_scenarios = [
-        ("Scenario 1: Genuine Passport + Live Match", "LOW RISK / VERIFIED (Score: 6/100)", COLOR_GREEN, [
+        ("Scenario 1: Genuine Passport + Live Match", "LOW RISK / VERIFIED (Score: 0/100)", COLOR_GREEN, [
             "Document: Authentic US Passport (Johnathan Doe, A89412051)",
             "Live Photo: Matching portrait (Webcam / Live Photo)",
             "ICAO 9303 Checksum: 100% verified (doc no, DOB, expiry)",
-            "Biometric Match: 82.5% similarity (MATCH CONFIRMED)",
+            "Biometric Match: 62.8% similarity (MATCH CONFIRMED)",
             "Verdict: CLEAR FOR TRANSIT"
         ]),
         ("Scenario 2: Expired Visa + Watchlist Alert", "HIGH RISK / REJECTED (Score: 100/100)", COLOR_RED, [
@@ -562,11 +563,11 @@ def create_presentation():
             "Border Stamp: Evaluated for ink bleed authenticity",
             "Verdict: SECONDARY DETENTION / REJECTED"
         ]),
-        ("Scenario 3: Tampered Passport + Impersonator", "CRITICAL RISK / REJECTED (Score: 86/100)", COLOR_RED, [
+        ("Scenario 3: Tampered Passport + Impersonator", "HIGH RISK / REJECTED (Score: 63/100)", COLOR_RED, [
             "Document: Tampered Passport with altered name 'Vikram Mehta'",
-            "Photo Splice: Compression anomaly detected on facial ROI",
+            "Photo Splice: Compression anomaly evaluated on facial ROI",
             "ICAO MRZ Checksum: Corrupt check digit mathematically flagged",
-            "Biometric Match: 32.5% similarity (MISMATCH CONFIRMED)",
+            "Biometric Match: 35.3% similarity (MISMATCH CONFIRMED)",
             "Verdict: IDENTITY IMPERSONATION ALERT"
         ])
     ]
@@ -609,10 +610,10 @@ def create_presentation():
     add_slide_header(s10, "Key Differentiators: Why TruthLens Stands Out")
 
     diffs = [
-        ("1. Explainable Legal Audit Trail", "Unlike black-box neural networks that simply output 'Fake: 95%', TruthLens provides an itemized, court-admissible forensic breakdown with exact mathematical proofs and localized bounding boxes."),
-        ("2. Dual Mathematical Checksums", "Combines UIDAI Verhoeff D5 dihedral permutations for Indian national IDs and ICAO 9303 cyclic 7-3-1 weighting for international passports."),
-        ("3. 100% Local Deployment", "Runs entirely on-premises without transmitting sensitive citizen biometric data to external commercial cloud APIs."),
-        ("4. Sub-2-Second High Throughput", "Processes complete 7-step pipeline in 1.2 to 1.8 seconds, enabling high-volume border screening without terminal delays.")
+        ("1. Court-Admissible Legal Explainability", "Unlike black-box neural networks that simply output 'Fake: 95%', TruthLens provides an itemized, court-admissible forensic breakdown with exact mathematical proofs and localized bounding boxes."),
+        ("2. Blockchain-Style Cryptographic Ledger", "Sequential SHA-256 hash-chaining anchored at Genesis Block #0 proves data immutability and exposes any internal database tampering in milliseconds."),
+        ("3. DPDP Act 2023 Data Minimization", "Implements presentation-layer masking on all overview displays while unlocking complete forensic records for active officer inspection."),
+        ("4. 100% Local-First Edge Deployment", "Processes complete 7-step pipeline in under 1.5 seconds without transmitting sensitive citizen biometric data to external commercial cloud APIs.")
     ]
 
     for i, (dtitle, ddesc) in enumerate(diffs):
