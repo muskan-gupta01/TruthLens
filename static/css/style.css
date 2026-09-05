@@ -1485,7 +1485,7 @@ body {
   background: rgba(10, 19, 34, 0.92);
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
-  top: 0;
+  top: 100px;
   z-index: 99;
   backdrop-filter: var(--glass-blur);
 }
@@ -1497,6 +1497,12 @@ body {
   gap: 0.35rem;
   overflow-x: auto;
   padding: 0.5rem 1.5rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.nav-container::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-tab {
