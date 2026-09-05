@@ -28,7 +28,7 @@ def _parse_uidai_secure_qr(payload: str) -> Optional[Dict[str, Any]]:
     Decompressed fields are delimited by byte 255 (0xFF).
     """
     clean_p = payload.strip()
-    if not clean_p.isdigit() or len(clean_p) < 200:
+    if not clean_p.isdigit() or len(clean_p) < 40:
         return None
 
     try:
@@ -207,14 +207,32 @@ def parse_qr_payload(payload: str) -> Dict[str, Any]:
     return _parse_text_payload(payload)
 
 
+try:
+    from pyzbar.pyzbar import decode as pyzbar_decode
+    HAS_PYZBAR = True
+except Exception:
+    HAS_PYZBAR = False
+
+
 def _try_decode_image(detector, cv_img: np.ndarray) -> Tuple[str, Any]:
-    """Attempts to decode a QR code from an image using the given OpenCV detector."""
-    try:
-        decoded_text, points, _ = detector.detectAndDecode(cv_img)
-        if decoded_text and len(decoded_text.strip()) > 0:
-            return decoded_text.strip(), points
-    except Exception:
-        pass
+    """Attempts to decode a QR code from an image using pyzbar (high-density support) or OpenCV."""
+    if HAS_PYZBAR:
+        try:
+            results = pyzbar_decode(cv_img)
+            for r in results:
+                txt = r.data.decode("utf-8", errors="ignore").strip()
+                if txt:
+                    pts = np.array(r.polygon, dtype=np.int32) if r.polygon else None
+                    return txt, pts
+        except Exception:
+            pass
+    if detector is not None:
+        try:
+            decoded_text, points, _ = detector.detectAndDecode(cv_img)
+            if decoded_text and len(decoded_text.strip()) > 0:
+                return decoded_text.strip(), points
+        except Exception:
+            pass
     return "", None
 
 

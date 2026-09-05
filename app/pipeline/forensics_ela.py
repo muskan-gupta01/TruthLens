@@ -321,7 +321,7 @@ def analyze_photo_splice(
         bg_mean = float(np.mean(diff_gray[bg_mask]))
 
     # Prevent small-denominator inflation on ultra-clean flat white card substrate
-    bg_ref = max(0.55, bg_mean)
+    bg_ref = max(0.65, bg_mean)
     ratio = face_mean / bg_ref
 
     # Seam / boundary edge gradient check along the photo perimeter
@@ -349,10 +349,10 @@ def analyze_photo_splice(
     seam_spliced = (seam_ratio > 2.2 and seam_mean > 1.2) or (seam_grad > 3.8 and seam_mean > 1.3)
 
     # Splicing criteria:
-    # 1. Ratio > 2.15 with face error > 1.10 (elevated high-frequency recompression error in spliced patch)
-    # 2. Ratio > 2.60 with face error > 0.90
-    # 3. Ratio < 0.35 with background error > 0.40 (differentially pre-quantized patch)
-    is_spliced = (ratio > 2.15 and (face_mean > 1.10 or ratio > 2.60 or seam_spliced)) or (ratio < 0.35 and bg_mean > 0.40)
+    # 1. Ratio > 2.25 with face error > 1.15 and physical perimeter seam anomaly
+    # 2. Extreme compression discrepancy (Ratio > 2.85 with face error > 1.25)
+    # 3. Ratio < 0.35 with background error > 0.50 (differentially pre-quantized patch)
+    is_spliced = (ratio > 2.25 and (seam_spliced or (ratio > 2.85 and face_mean > 1.25))) or (ratio < 0.35 and bg_mean > 0.50)
 
     # Check high-frequency noise disparity if cv_img is supplied
     noise_ratio = 1.0
@@ -364,8 +364,10 @@ def analyze_photo_splice(
             face_noise = float(np.mean(noise[y:y+h, x:x+w]))
             ref_mask = local_bg_mask if np.any(local_bg_mask) else bg_mask
             bg_noise = float(np.mean(noise[ref_mask]))
-            noise_ratio = face_noise / max(0.1, bg_noise)
-            if (noise_ratio > 2.6 or noise_ratio < 0.35) and face_mean > 0.80:
+            # Calibrated baseline floor to prevent division-by-zero on smooth plastic/PVC cards
+            noise_ref = max(0.65, bg_noise)
+            noise_ratio = face_noise / noise_ref
+            if (noise_ratio > 3.2 or noise_ratio < 0.25) and (face_mean > 1.25 or seam_spliced):
                 is_spliced = True
         except Exception:
             pass

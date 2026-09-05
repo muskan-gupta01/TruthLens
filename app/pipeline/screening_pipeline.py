@@ -21,7 +21,7 @@ import numpy as np
 
 from app.pipeline.ocr_extractor import extract_document_fields
 from app.pipeline.qr_detector import detect_and_decode_qr
-from app.pipeline.format_validator import validate_document_rules, validate_verhoeff
+from app.pipeline.format_validator import validate_document_rules, validate_verhoeff, validate_aadhaar_number
 from app.pipeline.forensics_ela import run_ela_forensic_analysis
 from app.pipeline.metadata_forensics import analyze_image_metadata
 from app.pipeline.face_verifier import verify_identity_face
@@ -115,8 +115,13 @@ def run_truthlens_screening(
             ocr_result["is_claimed_mismatch"] = False
             ocr_result["is_non_identity"] = False
             # Fill missing OCR fields only if not present on document
-            if not fields.get("id_number") and qr_fields.get("id_number"):
-                fields["id_number"] = qr_fields.get("id_number")
+            if not fields.get("id_number"):
+                raw_text = str(ocr_result.get("raw_text") or "")
+                m12 = re.search(r"\b([2-9]\d{3})[\s\-]*(\d{4})[\s\-]*(\d{4})\b", raw_text)
+                if m12:
+                    fields["id_number"] = f"{m12.group(1)} {m12.group(2)} {m12.group(3)}"
+                elif qr_fields.get("id_number") and not str(qr_fields.get("id_number")).startswith("XXXX"):
+                    fields["id_number"] = qr_fields.get("id_number")
             if not fields.get("dob") and qr_fields.get("dob"):
                 fields["dob"] = qr_fields.get("dob")
             if not fields.get("name") and qr_fields.get("name"):
@@ -212,7 +217,7 @@ def run_truthlens_screening(
         fields.get("id_number") or
         fields.get("license_number") or
         fields.get("permit_id") or
-        qr_fields.get("id_number")
+        (qr_fields.get("id_number") if not str(qr_fields.get("id_number") or "").startswith("XXXX") else None)
     )
     claimed_type = ocr_result.get("claimed_type") or doc_type
     is_mismatch = ocr_result.get("is_claimed_mismatch", False)
@@ -280,12 +285,13 @@ def run_truthlens_screening(
             checksum_detail = v_check.get("detail", "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number.")
         else:
             # Fallback to direct validation
-            if num_val and validate_verhoeff(num_val):
+            v_res = validate_aadhaar_number(num_val)
+            if num_val and v_res.get("valid"):
                 checksum_status = "PASS"
-                checksum_detail = f"UIDAI Verhoeff: Dihedral D5 checksum algorithm valid for {num_val}."
+                checksum_detail = v_res.get("message", f"UIDAI Verhoeff: Checksum algorithm valid for {num_val}.")
             else:
                 checksum_status = "FAIL"
-                checksum_detail = "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number."
+                checksum_detail = v_res.get("message", "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number.")
     elif doc_type == DOC_TYPE_PAN:
         pan_check = next((c for c in validation_result.get("checklist", []) if "PAN" in (c.get("check") or c.get("name") or "")), None)
         if pan_check and pan_check.get("status") == "PASS":

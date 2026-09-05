@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=9.0" />
+  <link rel="stylesheet" href="/static/css/style.css?v=9.3" />
 </head>
 
 <body>
@@ -1098,6 +1098,9 @@
           Blockchain-inspired cryptographic ledger. Every completed screening is hashed via SHA-256 and sequentially linked
           to the previous block's hash. Any retroactive modification or database tampering instantly breaks the chain.
         </p>
+        <div class="audit-scope-notice" style="margin-top: 0.85rem; padding: 0.75rem 1.1rem; background: rgba(56, 189, 248, 0.08); border-left: 3px solid #38bdf8; border-radius: 6px; font-size: 0.88rem; color: #cbd5e1; line-height: 1.5;">
+          ℹ️ <strong>System Clarification:</strong> This confirms the tamper-proof <strong>RECORD-KEEPING</strong> system is intact — it does <strong>NOT</strong> mean all screened documents were genuine. Individual document verdicts (genuine vs. fraud-flagged) are shown in <button type="button" class="btn-dossier-link" data-goto="tab-history" style="background: none; border: none; color: #38bdf8; text-decoration: underline; cursor: pointer; font-size: inherit; font-family: inherit; padding: 0; font-weight: 500;">Screening History</button>.
+        </div>
       </div>
 
       <!-- Audit KPI Summary Cards -->
@@ -1114,8 +1117,8 @@
           <div class="kpi-icon icon-green" id="audit-kpi-status-icon">🛡️</div>
           <div class="kpi-details">
             <span class="kpi-label">Ledger Integrity</span>
-            <span class="kpi-value" id="audit-kpi-status" style="font-size: 1.1rem; color: #10b981;">VERIFIED</span>
-            <span class="kpi-meta" id="audit-kpi-status-meta">Zero tampering detected</span>
+            <span class="kpi-value" id="audit-kpi-status" style="font-size: 1.1rem; color: #10b981;">INTACT</span>
+            <span class="kpi-meta" id="audit-kpi-status-meta">Zero record tampering</span>
           </div>
         </div>
         <div class="kpi-card">
@@ -1227,7 +1230,7 @@
   </div>
 
   <!-- Client Application Script -->
-  <script src="/static/js/app.js?v=9.0"></script>
+  <script src="/static/js/app.js?v=9.3"></script>
 </body>
 
 </html>

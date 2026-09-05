@@ -82,32 +82,55 @@ def compare_id_numbers(ocr_id: str, qr_id: str) -> Tuple[float, str, str]:
     if d_ocr == d_qr:
         return 100.0, "MATCH", f"ID number matches perfectly ({d_ocr})."
     
-    # Check if masked Aadhaar (e.g. XXXX XXXX 1234)
+    # Statutory UIDAI Privacy Masking - Bidirectional 4-digit vs 12-digit checks:
+    # Case A: Document printed full 12 digits, QR stores last 4 digits (UIDAI Secure QR V2 standard)
+    if len(d_qr) == 4 and d_ocr.endswith(d_qr):
+        return 100.0, "MATCH", f"Verified: Document ID matches UIDAI Secure QR record (last 4 digits: {d_qr})."
+
+    # Case B: Document printed masked with last 4 digits, QR stores full 12 digits (legacy QR)
     if len(d_ocr) == 4 and d_qr.endswith(d_ocr):
-        return 100.0, "MATCH", f"Masked ID matches last 4 digits ({d_ocr}) of QR record."
+        return 100.0, "MATCH", f"Verified: Masked document ID matches last 4 digits ({d_ocr}) of QR record."
+
+    # Case C: Both are masked or partial and match last 4 digits
+    if len(d_ocr) >= 4 and len(d_qr) >= 4 and d_ocr[-4:] == d_qr[-4:] and (len(d_ocr) == 4 or len(d_qr) == 4):
+        return 100.0, "MATCH", f"Verified: Masked ID matches last 4 digits ({d_ocr[-4:]}) across document and QR."
 
     sim = compute_string_similarity(d_ocr, d_qr)
     return sim, "MISMATCH", f"CRITICAL: ID number mismatch! Document reads '{d_ocr}' but QR contains '{d_qr}'."
 
 
-def compare_names(ocr_name: str, qr_name: str) -> Tuple[float, str, str]:
+def compare_names(ocr_name: str, qr_name: str, raw_ocr_text: str = "") -> Tuple[float, str, str]:
     """
     Compares printed name on document with name stored in the QR code.
+    Also searches raw_ocr_text to ensure OCR field-extraction misses don't cause false alarms.
     Returns: (similarity_score, status, explanation)
     """
-    if not ocr_name:
-        return 0.0, "MISSING", "Name could not be confidently identified by OCR."
     if not qr_name:
         return 0.0, "MISSING", "Name is not present in QR code data."
 
-    sim = compute_string_similarity(ocr_name, qr_name)
+    # First check direct similarity
+    sim = compute_string_similarity(ocr_name, qr_name) if ocr_name else 0.0
 
     if sim >= FUZZY_MATCH_THRESHOLD_PASS:
         return sim, "MATCH", f"Name verified: '{ocr_name}' matches QR '{qr_name}' ({sim:.0f}% similarity)."
     elif sim >= FUZZY_MATCH_THRESHOLD_WARN:
         return sim, "PARTIAL", f"Minor name variation: Document reads '{ocr_name}', QR reads '{qr_name}' ({sim:.0f}% similarity - possible OCR typo or abbreviation)."
-    else:
-        return sim, "MISMATCH", f"CRITICAL: Name mismatch! Document printed name '{ocr_name}' conflicts with QR identity '{qr_name}' ({sim:.0f}% similarity)."
+
+    # If field similarity is low, verify whether the QR name or its core tokens exist in raw_ocr_text
+    if raw_ocr_text:
+        raw_upper = raw_ocr_text.upper()
+        qr_clean = _clean_string(qr_name).upper()
+        if qr_clean and qr_clean in raw_upper:
+            return 100.0, "MATCH", f"Name verified: QR identity '{qr_name}' confirmed present on physical document surface."
+
+        qr_tokens = [tok for tok in qr_clean.split() if len(tok) >= 3]
+        if qr_tokens and all(tok in raw_upper for tok in qr_tokens):
+            return 95.0, "MATCH", f"Name verified: All tokens of QR identity '{qr_name}' confirmed on physical document surface."
+
+    if not ocr_name:
+        return 0.0, "MISSING", "Name could not be confidently identified by OCR."
+
+    return sim, "MISMATCH", f"CRITICAL: Name mismatch! Document printed name '{ocr_name}' conflicts with QR identity '{qr_name}' ({sim:.0f}% similarity)."
 
 
 def compare_dates(ocr_dob: str, qr_dob: str) -> Tuple[float, str, str]:
@@ -212,10 +235,18 @@ def cross_verify_documents(ocr_data: Dict[str, Any], qr_data: Dict[str, Any]) ->
         scores.append(id_score)
 
     # 2. Compare Name
+    raw_ocr = str(ocr_data.get("raw_text") or "")
     name_score, name_status, name_exp = compare_names(
         ocr_fields.get("name", ""),
-        qr_fields.get("name", "")
+        qr_fields.get("name", ""),
+        raw_ocr_text=raw_ocr
     )
+    # If QR name verified on document face via raw text, sync ocr field
+    if name_status == "MATCH" and qr_fields.get("name") and not ocr_fields.get("name"):
+        ocr_fields["name"] = qr_fields["name"]
+    elif name_status == "MATCH" and qr_fields.get("name") and ocr_fields.get("name") != qr_fields.get("name") and "Unique" in str(ocr_fields.get("name")):
+        ocr_fields["name"] = qr_fields["name"]
+
     matrix.append({
         "field": "Name",
         "ocr_val": ocr_fields.get("name") or "Not detected",

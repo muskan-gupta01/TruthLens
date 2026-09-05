@@ -663,19 +663,25 @@ def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
     """Extracts Aadhaar fields (ID Number, Name, DOB, Gender)."""
     fields: Dict[str, Any] = {"id_number": None, "dob": None, "gender": None, "name": None}
 
-    # 1. 12-digit Aadhaar Number (standard 4 4 4 grouping or continuous)
-    id_match = re.search(r"\b([2-9]\d{3}\s\d{4}\s\d{4})\b", text)
+    # 1. Aadhaar Number (12-digit standard or statutory masked XXXX XXXX 1234)
+    # Flexible 12-digit match: 4+4+4, 4+8, 8+4, or 12 continuous digits with optional spaces/hyphens
+    id_match = re.search(r"\b([2-9]\d{3})[\s\-]*(\d{4})[\s\-]*(\d{4})\b", text)
     if id_match:
-        fields["id_number"] = id_match.group(1).strip()
+        fields["id_number"] = f"{id_match.group(1)} {id_match.group(2)} {id_match.group(3)}"
     else:
-        m12 = re.search(r"\b(\d{4}\s\d{4}\s\d{4})\b", text)
-        if m12:
-            fields["id_number"] = m12.group(1).strip()
+        # Check statutory Masked Aadhaar (e.g. XXXX XXXX 1234 or **** **** 1234)
+        m_mask = re.search(r"\b([Xx\*\.••]{4}\s[Xx\*\.••]{4}\s\d{4})\b", text)
+        if m_mask:
+            fields["id_number"] = m_mask.group(1).strip().upper()
         else:
-            m_cont = re.search(r"\b([2-9]\d{11})\b", text)
-            if m_cont:
-                raw_id = m_cont.group(1)
-                fields["id_number"] = f"{raw_id[:4]} {raw_id[4:8]} {raw_id[8:]}"
+            m12 = re.search(r"\b(\d{4})[\s\-]*(\d{4})[\s\-]*(\d{4})\b", text)
+            if m12:
+                fields["id_number"] = f"{m12.group(1)} {m12.group(2)} {m12.group(3)}"
+            else:
+                m_cont = re.search(r"\b([2-9]\d{11})\b", text)
+                if m_cont:
+                    raw_id = m_cont.group(1)
+                    fields["id_number"] = f"{raw_id[:4]} {raw_id[4:8]} {raw_id[8:]}"
 
     # 2. Date of Birth
     dob_m = re.search(r"(?:DOB|Date of Birth|Birth|Dos|DO8)[\s:/=>]*(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})", text, re.IGNORECASE)
@@ -699,36 +705,59 @@ def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
         fields["gender"] = "TRANSGENDER"
 
     # 4. Name extraction
+    _EXCLUDE_NAME_TOKENS = [
+        "GOVERNMENT", "INDIA", "AADHAAR", "AADHAR", "UIDAI", "UNIQUE", "IDENTIFICATION",
+        "AUTHORITY", "PEHCHAN", "BHARAT", "SARKAR", "DOB", "GENDER", "MALE", "FEMALE",
+        "ENROLMENT", "HELP", "DOWNLOAD", "ISSUE", "VID", "DATE", "BIRTH", "YEAR", "FATHER",
+        "HUSBAND", "WIFE", "ADDRESS", "PIN", "WWW", "HTTP", "MERI", "MERA", "PURUSH", "MAHILA"
+    ]
+
     # Strategy A: Direct label match "Name: <name>" or "Name\n<name>"
     nm_match = re.search(r"(?:Name|Naam)[\s:/=>]*\n?([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
     if nm_match:
         cand = nm_match.group(1).strip()
-        # Ensure candidate is not a common label or header
-        if not any(k in cand.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "MALE", "FEMALE", "UIDAI"]):
+        if not any(k in cand.upper() for k in _EXCLUDE_NAME_TOKENS):
             fields["name"] = cand
 
     # Strategy B: Line inspection with symbol stripping
     if not fields["name"]:
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         for i, line in enumerate(lines):
-            # Look for line containing 'Name' and inspect subsequent line
             if re.search(r"\bName\b", line, re.IGNORECASE):
                 for next_l in lines[i+1:i+4]:
                     cand = re.sub(r"^[^A-Za-z]+", "", next_l).strip()
-                    if cand and len(cand) >= 3 and not any(k in cand.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "GENDER", "MALE", "FEMALE", "UIDAI"]):
+                    if cand and len(cand) >= 3 and not any(k in cand.upper() for k in _EXCLUDE_NAME_TOKENS):
                         if re.match(r"^[A-Za-z][A-Za-z ]{2,30}$", cand):
                             fields["name"] = cand
                             break
                 if fields["name"]:
                     break
 
-    # Strategy C: First proper name before DOB/Gender
+    # Strategy C1: Line immediately preceding DOB / Gender (standard UIDAI physical card layout)
+    if not fields["name"]:
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        dob_idx = -1
+        for i, line in enumerate(lines):
+            if re.search(r"\b(DOB|Date of Birth|Birth|YOB|Year of Birth)\b", line, re.IGNORECASE):
+                dob_idx = i
+                break
+        if dob_idx > 0:
+            for k in range(dob_idx - 1, max(-1, dob_idx - 4), -1):
+                clean_l = re.sub(r"^[^A-Za-z]+", "", lines[k]).strip()
+                clean_l = re.sub(r"[^A-Za-z\s]", "", clean_l).strip()
+                if len(clean_l) >= 3 and not any(tok in clean_l.upper() for tok in _EXCLUDE_NAME_TOKENS):
+                    if re.match(r"^[A-Za-z][A-Za-z\s]{2,30}$", clean_l):
+                        fields["name"] = clean_l
+                        break
+
+    # Strategy C2: Fallback proper name before DOB/Gender with strict exclusion
     if not fields["name"]:
         lines = [l.strip() for l in text.splitlines() if l.strip()]
         for line in lines:
             clean_l = re.sub(r"^[^A-Za-z]+", "", line).strip()
-            if len(clean_l) > 3 and not any(k in clean_l.upper() for k in ["GOVERNMENT", "INDIA", "AADHAAR", "DOB", "MALE", "FEMALE", "UIDAI", "AUTHORITY", "PEHCHAN"]):
-                if re.match(r"^[A-Za-z][A-Za-z ]{2,30}$", clean_l):
+            clean_l = re.sub(r"[^A-Za-z\s]", "", clean_l).strip()
+            if len(clean_l) >= 3 and not any(k in clean_l.upper() for k in _EXCLUDE_NAME_TOKENS):
+                if re.match(r"^[A-Za-z][A-Za-z\s]{2,30}$", clean_l):
                     fields["name"] = clean_l
                     break
 

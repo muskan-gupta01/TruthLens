@@ -3427,7 +3427,66 @@ body {
   background: rgba(56, 189, 248, 0.15);
   color: #38bdf8;
   border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 0.5rem;
+  gap: 8px;
+}
+
+.node-verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.node-verdict-badge.fraud {
+  background: rgba(239, 68, 68, 0.22);
+  color: #ff6b6b;
+  border: 1px solid rgba(239, 68, 68, 0.7);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+.node-verdict-badge.genuine {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+.node-verdict-badge.review {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.65);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+}
+
+.hash-chain-node.node-fraud {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.hash-chain-node.node-fraud:hover {
+  border-color: rgba(239, 68, 68, 0.85);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.28);
+}
+
+.hash-chain-node.node-genuine {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.hash-chain-node.node-genuine:hover {
+  border-color: rgba(16, 185, 129, 0.75);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.22);
 }
 
 .node-id {

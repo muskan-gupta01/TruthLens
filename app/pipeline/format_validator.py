@@ -240,14 +240,53 @@ def validate_pan_number(pan_str: Optional[str]) -> Dict[str, Any]:
 
 
 def validate_aadhaar_number(aadhaar_str: Optional[str]) -> Dict[str, Any]:
-    """Validates 12-digit Aadhaar number with Verhoeff mathematical checksum."""
+    """
+    Validates Aadhaar number with UIDAI Verhoeff mathematical checksum (12 digits)
+    or statutory Masked Aadhaar format (XXXX XXXX 1234) under UIDAI / DPDP guidelines.
+    """
     if not aadhaar_str:
-        return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": "Aadhaar number missing"}
-    clean_digits = re.sub(r"\D", "", aadhaar_str)
+        return {
+            "valid": True,
+            "status": "WARN",
+            "label": "⚠ Unreadable / Glare",
+            "message": "Aadhaar number not detected via OCR. Verify document surface or re-scan under even lighting."
+        }
+
+    raw_str = str(aadhaar_str).strip()
+
+    # 1. Statutory Masked Aadhaar check (e.g. XXXX XXXX 1234, **** **** 1234, •••• •••• 1234)
+    clean_digits = re.sub(r"\D", "", raw_str)
+    has_mask_symbols = bool(re.search(r"[Xx\*\.••]", raw_str)) or "XXXX" in raw_str.upper()
+
+    if len(clean_digits) == 4 and (has_mask_symbols or raw_str.upper().startswith("XXXX")):
+        return {
+            "valid": True,
+            "status": "PASS",
+            "label": "✓ Valid",
+            "message": f"Statutory Masked Aadhaar (XXXX XXXX {clean_digits}) verified compliant with UIDAI privacy guidelines."
+        }
+
+    # 2. Optical character normalization if OCR read characters like 'O', 'I', 'l', 'S'
     if len(clean_digits) != 12:
-        return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": f"Aadhaar number must have exactly 12 digits (found {len(clean_digits)})."}
+        # Common OCR digit confusion map
+        ocr_digit_map = {'O': '0', 'o': '0', 'D': '0', 'Q': '0', 'I': '1', 'l': '1', '|': '1', 'S': '5', 's': '5', 'B': '8', 'Z': '2'}
+        norm_str = "".join(ocr_digit_map.get(ch, ch) for ch in raw_str)
+        cand_digits = re.sub(r"\D", "", norm_str)
+        if len(cand_digits) == 12 and validate_verhoeff(cand_digits):
+            clean_digits = cand_digits
+
+    # 3. 12-digit format check
+    if len(clean_digits) != 12:
+        return {
+            "valid": False,
+            "status": "FAIL",
+            "label": "✕ Invalid",
+            "message": f"Aadhaar number must have exactly 12 digits or statutory masked format (found {len(clean_digits)} digits)."
+        }
+
     if clean_digits[0] in ["0", "1"]:
         return {"valid": False, "status": "FAIL", "label": "✕ Invalid", "message": "Aadhaar number cannot begin with 0 or 1."}
+
     is_valid = validate_verhoeff(clean_digits)
     if not is_valid:
         return {
@@ -256,6 +295,7 @@ def validate_aadhaar_number(aadhaar_str: Optional[str]) -> Dict[str, Any]:
             "label": "✕ Invalid",
             "message": f"Mathematical Checksum Failure: Aadhaar number '{clean_digits}' failed Verhoeff algorithm verification (counterfeit sequence)."
         }
+
     return {
         "valid": True,
         "status": "PASS",
@@ -398,6 +438,8 @@ def validate_document_rules(
         })
         if res_num["status"] == "FAIL":
             total_failures += 1
+        elif res_num["status"] == "WARN":
+            total_warnings += 1
 
     elif doc_type == DOC_TYPE_PAN:
         res_num = validate_pan_number(doc_num)

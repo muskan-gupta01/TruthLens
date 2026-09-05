@@ -99,6 +99,15 @@
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
 
+  // Global handler for any internal link or button with data-goto
+  document.addEventListener('click', (e) => {
+    const gotoBtn = e.target.closest('[data-goto]');
+    if (gotoBtn && gotoBtn.dataset.goto) {
+      e.preventDefault();
+      switchTab(gotoBtn.dataset.goto);
+    }
+  });
+
   // =========================================================================
   // 2. DOCUMENT UPLOAD & DRAG-AND-DROP
   // =========================================================================
@@ -1376,9 +1385,33 @@
         const docBadgeHtml = maskedDocNum
           ? `<div class="node-doc-summary" style="margin-top: 0.35rem; font-size: 0.76rem; color: #94a3b8;"><span style="color: var(--teal-neon);">${block.doc_type || 'DOC'}:</span> <span class="masked-doc-badge" style="font-size: 0.72rem; padding: 2px 6px;">${maskedDocNum}</span></div>`
           : '';
+
+        // Robust classification across verdict, risk_level, and risk_score
+        const v = (block.verdict || '').toUpperCase();
+        const rl = (block.risk_level || '').toUpperCase();
+        const score = typeof block.risk_score === 'number' ? block.risk_score : -1;
+        const isFraud = v.includes('HIGH') || v.includes('SUSPICIOUS') || v.includes('REJECT') || v.includes('FRAUD') || rl === 'HIGH' || score >= 60;
+        const isReview = !isFraud && (v.includes('REVIEW') || rl === 'MEDIUM' || (score >= 30 && score < 60));
+        const isGenuine = !isFraud && !isReview && (v.includes('VERIFIED') || v.includes('LOW RISK') || v.includes('GENUINE') || rl === 'LOW' || (score >= 0 && score < 30));
+
+        let verdictBadgeHtml = '';
+        let nodeExtraClass = '';
+
+        if (isFraud) {
+          verdictBadgeHtml = `<span class="node-verdict-badge fraud" title="Underlying Screening: Fraud / Rejected Document">🚨 FRAUD / REJECT</span>`;
+          nodeExtraClass = 'node-fraud';
+        } else if (isReview) {
+          verdictBadgeHtml = `<span class="node-verdict-badge review" title="Underlying Screening: Needs Manual Review">⚠️ REVIEW</span>`;
+          nodeExtraClass = 'node-review';
+        } else if (isGenuine) {
+          verdictBadgeHtml = `<span class="node-verdict-badge genuine" title="Underlying Screening: Genuine Document">🛡️ GENUINE</span>`;
+          nodeExtraClass = 'node-genuine';
+        }
+
         const tooltipDocPart = maskedDocNum ? `Doc: ${maskedDocNum} (Masked)\n` : '';
         const titleText = `Block #${block.id} | Screening: ${block.screening_id}\n` +
           `Subject: ${block.person_name || 'N/A'}\n` +
+          `Screening Verdict: ${block.verdict || 'N/A'}\n` +
           tooltipDocPart +
           `Full Hash: ${block.record_hash}\n` +
           `Previous: ${block.previous_hash}`;
@@ -1388,8 +1421,11 @@
             <span class="chain-link-icon">⛓️</span>
             <span class="chain-arrow">➔</span>
           </div>
-          <div class="hash-chain-node" title="${titleText}">
-            <div class="node-badge">BLOCK #${block.id}</div>
+          <div class="hash-chain-node ${nodeExtraClass}" title="${titleText}">
+            <div class="node-header">
+              <div class="node-badge">BLOCK #${block.id}</div>
+              ${verdictBadgeHtml}
+            </div>
             <div class="node-id">${block.screening_id}</div>
             <div class="node-hash">
               <span class="hash-label">HASH:</span> <code class="code-hash">${block.short_hash}...</code>
@@ -1426,15 +1462,15 @@
         // Verified state
         auditBanner.className = 'audit-banner success';
         if (auditBannerIcon) auditBannerIcon.textContent = '✅';
-        if (auditBannerTitle) auditBannerTitle.textContent = 'Cryptographic Ledger Verified — No Tampering Detected';
+        if (auditBannerTitle) auditBannerTitle.textContent = 'Audit Log Integrity Confirmed — Zero Database Tampering';
         if (auditBannerDesc) {
-          auditBannerDesc.textContent = `${data.total_records} chained record(s) cryptographically audited. All SHA-256 digests and previous-hash pointers are 100% intact.`;
+          auditBannerDesc.textContent = `All ${data.total_records} screening records (including both genuine and fraud-flagged cases) remain unaltered since they were created.`;
         }
         if (auditKpiStatus) {
-          auditKpiStatus.textContent = 'VERIFIED';
+          auditKpiStatus.textContent = 'INTACT';
           auditKpiStatus.style.color = '#10b981';
         }
-        if (auditKpiStatusMeta) auditKpiStatusMeta.textContent = 'Cryptographic integrity 100%';
+        if (auditKpiStatusMeta) auditKpiStatusMeta.textContent = 'Records 100% unaltered';
         if (auditKpiStatusIcon) auditKpiStatusIcon.textContent = '🛡️';
       } else {
         // Tampered / Corrupted state

@@ -305,7 +305,7 @@ def log_screening(data: Dict[str, Any]) -> str:
             person_name = "Subject (Aadhaar Back Side)"
 
     doc_no = dossier.get("doc_number")
-    if doc_no and doc_no not in ["Not Detected", "N/A", ""]:
+    if doc_no and doc_no not in ["Not Detected", "N/A", ""] and not str(doc_no).startswith("XXXX"):
         doc_number = doc_no
     else:
         doc_number = (
@@ -314,9 +314,15 @@ def log_screening(data: Dict[str, Any]) -> str:
             or data.get("ocr", {}).get("fields", {}).get("visa_number")
             or data.get("ocr", {}).get("fields", {}).get("license_number")
             or data.get("ocr", {}).get("fields", {}).get("permit_id")
-            or data.get("qr", {}).get("fields", {}).get("id_number")
-            or "N/A"
         )
+        if not doc_number or str(doc_number).startswith("XXXX"):
+            raw_t = str(data.get("ocr", {}).get("raw_text") or "")
+            m12 = re.search(r"\b([2-9]\d{3})[\s\-]*(\d{4})[\s\-]*(\d{4})\b", raw_t)
+            if m12:
+                doc_number = f"{m12.group(1)} {m12.group(2)} {m12.group(3)}"
+            else:
+                qr_id = data.get("qr", {}).get("fields", {}).get("id_number")
+                doc_number = qr_id if qr_id and not str(qr_id).startswith("XXXX") else (doc_no or "N/A")
 
     risk_score = data.get("risk_assessment", {}).get("score", 0)
     risk_level = data.get("risk_assessment", {}).get("level", "LOW")
@@ -523,7 +529,7 @@ def get_audit_chain_records(limit: int = 50) -> List[Dict[str, Any]]:
     cursor = conn.cursor()
     cursor.execute("""
         SELECT a.id, a.timestamp, a.screening_id, a.record_hash, a.previous_hash, a.data_snapshot,
-               h.doc_type, h.doc_number, h.person_name, h.verdict
+               h.doc_type, h.doc_number, h.person_name, h.verdict, h.risk_level, h.risk_score
         FROM audit_chain a
         LEFT JOIN screening_history h ON a.screening_id = h.screening_id
         ORDER BY a.id DESC LIMIT ?
@@ -533,13 +539,16 @@ def get_audit_chain_records(limit: int = 50) -> List[Dict[str, Any]]:
 
     result = []
     for r in rows:
-        doc_type = r["doc_type"] if ("doc_type" in r.keys() and r["doc_type"]) else None
-        doc_number = r["doc_number"] if ("doc_number" in r.keys() and r["doc_number"]) else None
-        person_name = r["person_name"] if ("person_name" in r.keys() and r["person_name"]) else None
-        verdict = r["verdict"] if ("verdict" in r.keys() and r["verdict"]) else None
+        keys = r.keys()
+        doc_type = r["doc_type"] if ("doc_type" in keys and r["doc_type"]) else None
+        doc_number = r["doc_number"] if ("doc_number" in keys and r["doc_number"]) else None
+        person_name = r["person_name"] if ("person_name" in keys and r["person_name"]) else None
+        verdict = r["verdict"] if ("verdict" in keys and r["verdict"]) else None
+        risk_level = r["risk_level"] if ("risk_level" in keys and r["risk_level"]) else None
+        risk_score = r["risk_score"] if ("risk_score" in keys and r["risk_score"] is not None) else None
 
-        # Fallback to data_snapshot if not present in screening_history
-        if (not doc_number or not doc_type) and r["data_snapshot"]:
+        # Fallback to data_snapshot if any key metadata is missing
+        if (not doc_number or not doc_type or not verdict or not risk_level) and r["data_snapshot"]:
             try:
                 snap = json.loads(r["data_snapshot"])
                 if not doc_type:
@@ -550,6 +559,10 @@ def get_audit_chain_records(limit: int = 50) -> List[Dict[str, Any]]:
                     person_name = snap.get("person_name")
                 if not verdict:
                     verdict = snap.get("verdict")
+                if not risk_level:
+                    risk_level = snap.get("risk_level")
+                if risk_score is None:
+                    risk_score = snap.get("risk_score")
             except Exception:
                 pass
 
@@ -564,7 +577,9 @@ def get_audit_chain_records(limit: int = 50) -> List[Dict[str, Any]]:
             "doc_type": doc_type or "DOCUMENT",
             "doc_number": doc_number or "N/A",
             "person_name": person_name or "N/A",
-            "verdict": verdict or "RECORDED"
+            "verdict": verdict or "RECORDED",
+            "risk_level": risk_level or "UNKNOWN",
+            "risk_score": risk_score
         })
     # Return in chronological order so it reads left-to-right (genesis to latest)
     result.reverse()
