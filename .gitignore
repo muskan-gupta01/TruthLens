@@ -25,6 +25,8 @@ database/*.sqlite3
 # Temporary / Scratch files & Test Artifacts
 temp/*
 !temp/.gitkeep
+uploads/*
+!uploads/.gitkeep
 
 # IDEs and Editors
 .vscode/

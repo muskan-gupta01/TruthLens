@@ -16,6 +16,7 @@ Endpoints:
 """
 import io
 import os
+import re
 import base64
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -30,6 +31,7 @@ from app.config import (
     STATIC_DIR,
     SAMPLE_DOCS_DIR,
     TEMP_DIR,
+    UPLOADS_DIR,
     TESSERACT_PATH
 )
 from app.pipeline.screening_pipeline import run_truthlens_screening
@@ -128,9 +130,8 @@ def _resolve_safe_sample_path(sample_id: str) -> Optional[Path]:
     return None
 
 
-def _decode_image_file(upload: UploadFile) -> Image.Image:
-    """Safely decodes an uploaded file into an EXIF-oriented PIL Image with size, format, and decompression bomb guards."""
-    contents = upload.file.read(MAX_UPLOAD_SIZE + 1)
+def _decode_image_bytes(contents: bytes) -> Image.Image:
+    """Safely decodes raw image bytes into an EXIF-oriented PIL Image with size, format, and decompression bomb guards."""
     if len(contents) > MAX_UPLOAD_SIZE:
         raise HTTPException(
             status_code=413,
@@ -161,6 +162,12 @@ def _decode_image_file(upload: UploadFile) -> Image.Image:
         raise HTTPException(status_code=400, detail="Image exceeds maximum dimensions (decompression bomb protection).")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
+
+
+def _decode_image_file(upload: UploadFile) -> Image.Image:
+    """Safely decodes an uploaded file into an EXIF-oriented PIL Image with size, format, and decompression bomb guards."""
+    contents = upload.file.read(MAX_UPLOAD_SIZE + 1)
+    return _decode_image_bytes(contents)
 
 
 def _decode_base64_image(b64_str: str) -> Image.Image:
@@ -519,12 +526,16 @@ def screen_document(
     _get_current_user(request)
     doc_img = None
     live_img = None
+    raw_doc_bytes = None
+    doc_filename = None
 
     # Resolve document image
     effective_file = file or document_file
     if effective_file and effective_file.filename:
         try:
-            doc_img = _decode_image_file(effective_file)
+            raw_doc_bytes = effective_file.file.read(MAX_UPLOAD_SIZE + 1)
+            doc_img = _decode_image_bytes(raw_doc_bytes)
+            doc_filename = effective_file.filename
         except HTTPException:
             raise
         except Exception as e:
@@ -534,12 +545,17 @@ def screen_document(
         if not safe_path:
             raise HTTPException(status_code=404, detail=f"Sample document '{sample_id}' not found or invalid")
         try:
+            raw_doc_bytes = safe_path.read_bytes()
             doc_img = Image.open(safe_path).convert("RGB")
+            doc_filename = safe_path.name
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to open sample: {e}")
     elif image_base64:
         try:
-            doc_img = _decode_base64_image(image_base64)
+            b64_clean = image_base64.split(",", 1)[1] if "," in image_base64 else image_base64
+            raw_doc_bytes = base64.b64decode(b64_clean)
+            doc_img = _decode_image_bytes(raw_doc_bytes)
+            doc_filename = "document_upload.jpg"
         except HTTPException:
             raise
         except Exception as e:
@@ -573,7 +589,9 @@ def screen_document(
             live_image_input=live_img,
             doc_type_hint=doc_type,
             doc_number_override=doc_number,
-            person_name_override=person_name
+            person_name_override=person_name,
+            raw_doc_bytes=raw_doc_bytes,
+            doc_filename=doc_filename
         )
         return JSONResponse(content=result)
     except Exception as e:
@@ -598,6 +616,56 @@ async def get_screening_report_endpoint(screening_id: str, request: Request):
     if not report:
         raise HTTPException(status_code=404, detail="Screening report not found")
     return JSONResponse(content=report)
+
+
+@app.get("/api/history/{screening_id}/document")
+async def get_history_document_endpoint(screening_id: str, request: Request):
+    """
+    Retrieves the authentic uploaded document file associated with a screening record.
+    Protected by officer authentication and strict path traversal guards.
+    """
+    _get_current_user(request)
+
+    # Reject path traversal and ensure strict screening ID format
+    if not screening_id or not re.match(r"^[A-Za-z0-9\-]+$", screening_id):
+        raise HTTPException(status_code=400, detail="Invalid screening ID format")
+
+    base_dir = UPLOADS_DIR.resolve()
+    matched_file = None
+
+    for ext in [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif"]:
+        candidate = (UPLOADS_DIR / f"{screening_id}{ext}").resolve()
+        try:
+            candidate.relative_to(base_dir)
+            if candidate.parent == base_dir and candidate.exists() and candidate.is_file():
+                matched_file = candidate
+                break
+        except (ValueError, Exception):
+            continue
+
+    if not matched_file:
+        raise HTTPException(status_code=404, detail="Original document unavailable")
+
+    ext = matched_file.suffix.lower()
+    media_type_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+        ".tiff": "image/tiff",
+        ".tif": "image/tiff"
+    }
+    media_type = media_type_map.get(ext, "image/jpeg")
+
+    return FileResponse(
+        path=str(matched_file),
+        media_type=media_type,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=3600"
+        }
+    )
 
 
 @app.get("/api/mock-db")

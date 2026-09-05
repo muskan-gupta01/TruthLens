@@ -123,42 +123,67 @@
     const reader = new FileReader();
     reader.onload = (e) => {
       docBase64 = e.target.result;
-      docPreviewImg.src = docBase64;
-      docPreviewBox.classList.remove('hidden');
-      docDropzoneContent.classList.add('hidden');
+      if (docPreviewImg) docPreviewImg.src = docBase64;
+      if (docPreviewBox) docPreviewBox.classList.remove('hidden');
+      if (docDropzoneContent) docDropzoneContent.classList.add('hidden');
+      if (docDropzone) {
+        docDropzone.classList.add('has-file');
+        docDropzone.classList.add('has-preview');
+      }
     };
     reader.readAsDataURL(file);
   }
 
-  docDropzone.addEventListener('click', (e) => {
-    if (e.target !== btnClearDoc) docFileInput.click();
-  });
-
-  docFileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) handleDocFileSelect(e.target.files[0]);
-  });
-
-  docDropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    docDropzone.classList.add('dragover');
-  });
-
-  docDropzone.addEventListener('dragleave', () => docDropzone.classList.remove('dragover'));
-
-  docDropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    docDropzone.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) handleDocFileSelect(e.dataTransfer.files[0]);
-  });
-
-  btnClearDoc.addEventListener('click', (e) => {
-    e.stopPropagation();
+  function clearDocUpload(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     docFile = null;
     docBase64 = null;
-    docFileInput.value = '';
-    docPreviewBox.classList.add('hidden');
-    docDropzoneContent.classList.remove('hidden');
-  });
+    if (docFileInput) docFileInput.value = '';
+    if (docPreviewImg) docPreviewImg.src = '';
+    if (docPreviewBox) docPreviewBox.classList.add('hidden');
+    if (docDropzoneContent) docDropzoneContent.classList.remove('hidden');
+    if (docDropzone) {
+      docDropzone.classList.remove('has-file');
+      docDropzone.classList.remove('has-preview');
+    }
+  }
+
+  if (docDropzone) {
+    docDropzone.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-clear-doc')) {
+        return;
+      }
+      if (!docFile && !docBase64 && docFileInput) {
+        docFileInput.click();
+      }
+    });
+
+    docDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      docDropzone.classList.add('dragover');
+    });
+
+    docDropzone.addEventListener('dragleave', () => docDropzone.classList.remove('dragover'));
+
+    docDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      docDropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) handleDocFileSelect(e.dataTransfer.files[0]);
+    });
+  }
+
+  if (docFileInput) {
+    docFileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) handleDocFileSelect(e.target.files[0]);
+    });
+  }
+
+  if (btnClearDoc) {
+    btnClearDoc.addEventListener('click', clearDocUpload);
+  }
 
   // =========================================================================
   // 3. LIVE PASSENGER PHOTO & WEBCAM
@@ -169,42 +194,67 @@
     const reader = new FileReader();
     reader.onload = (e) => {
       liveBase64 = e.target.result;
-      livePreviewImg.src = liveBase64;
-      livePreviewBox.classList.remove('hidden');
-      liveDropzoneContent.classList.add('hidden');
+      if (livePreviewImg) livePreviewImg.src = liveBase64;
+      if (livePreviewBox) livePreviewBox.classList.remove('hidden');
+      if (liveDropzoneContent) liveDropzoneContent.classList.add('hidden');
+      if (liveDropzone) {
+        liveDropzone.classList.add('has-file');
+        liveDropzone.classList.add('has-preview');
+      }
     };
     reader.readAsDataURL(file);
   }
 
-  liveDropzone.addEventListener('click', (e) => {
-    if (e.target !== btnClearLive) liveFileInput.click();
-  });
-
-  liveFileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) handleLiveFileSelect(e.target.files[0]);
-  });
-
-  liveDropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    liveDropzone.classList.add('dragover');
-  });
-
-  liveDropzone.addEventListener('dragleave', () => liveDropzone.classList.remove('dragover'));
-
-  liveDropzone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    liveDropzone.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) handleLiveFileSelect(e.dataTransfer.files[0]);
-  });
-
-  btnClearLive.addEventListener('click', (e) => {
-    e.stopPropagation();
+  function clearLiveUpload(e) {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     liveFile = null;
     liveBase64 = null;
-    liveFileInput.value = '';
-    livePreviewBox.classList.add('hidden');
-    liveDropzoneContent.classList.remove('hidden');
-  });
+    if (liveFileInput) liveFileInput.value = '';
+    if (livePreviewImg) livePreviewImg.src = '';
+    if (livePreviewBox) livePreviewBox.classList.add('hidden');
+    if (liveDropzoneContent) liveDropzoneContent.classList.remove('hidden');
+    if (liveDropzone) {
+      liveDropzone.classList.remove('has-file');
+      liveDropzone.classList.remove('has-preview');
+    }
+  }
+
+  if (liveDropzone) {
+    liveDropzone.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-clear-live')) {
+        return;
+      }
+      if (!liveFile && !liveBase64 && liveFileInput) {
+        liveFileInput.click();
+      }
+    });
+
+    liveDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      liveDropzone.classList.add('dragover');
+    });
+
+    liveDropzone.addEventListener('dragleave', () => liveDropzone.classList.remove('dragover'));
+
+    liveDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      liveDropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files.length > 0) handleLiveFileSelect(e.dataTransfer.files[0]);
+    });
+  }
+
+  if (liveFileInput) {
+    liveFileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) handleLiveFileSelect(e.target.files[0]);
+    });
+  }
+
+  if (btnClearLive) {
+    btnClearLive.addEventListener('click', clearLiveUpload);
+  }
 
   // Webcam Toggle
   btnModeWebcam.addEventListener('click', async () => {
@@ -314,8 +364,8 @@
 
   // Reset Button
   btnResetForm.addEventListener('click', () => {
-    btnClearDoc.click();
-    btnClearLive.click();
+    clearDocUpload();
+    clearLiveUpload();
     docTypeSelect.value = 'AUTO';
     const docNumInp = document.getElementById('doc-number-input');
     if (docNumInp) docNumInp.value = '';
@@ -439,6 +489,9 @@
   // 6. RENDER SCREENING RESULTS ACROSS MODULES
   // =========================================================================
   function renderScreeningResults(data) {
+    // 0. Original Uploaded Document Preview (top of tab-risk inspect view)
+    renderInspectionDocument(data);
+
     // 1. OCR Results Tab
     renderOcrResults(data);
 
@@ -792,6 +845,253 @@
   }
 
   // =========================================================================
+  // 6A. RENDER ORIGINAL UPLOADED DOCUMENT INSPECTION PREVIEW (HISTORY -> INSPECT)
+  // =========================================================================
+  const INSPECT_DOC_STATES = {
+    LOADING: 'loading',
+    SUCCESS: 'success',
+    ERROR: 'error'
+  };
+
+  let currentInspectDocBlobUrl = null;
+  let inspectDocRequestSeq = 0;
+  let historyInspectSeq = 0;
+
+  function setInspectDocState(state) {
+    const viewport = document.getElementById('inspect-preview-viewport');
+    const docImg = document.getElementById('inspect-doc-img');
+    const loadingEl = document.getElementById('inspect-doc-loading');
+    const unavailableEl = document.getElementById('inspect-doc-unavailable');
+    const btnFullsize = document.getElementById('btn-inspect-fullsize');
+
+    // Automatically close lightbox modal if open
+    if (typeof closeFullSizeModal === 'function') {
+      closeFullSizeModal();
+    }
+
+    // Step 1: Explicitly clear and hide ALL mutually exclusive elements first
+    if (docImg) {
+      docImg.classList.add('hidden');
+      docImg.style.display = 'none';
+      if (state !== INSPECT_DOC_STATES.SUCCESS) {
+        docImg.onload = null;
+        docImg.onerror = null;
+        docImg.removeAttribute('src');
+        docImg.src = '';
+      }
+    }
+    if (loadingEl) {
+      loadingEl.classList.add('hidden');
+      loadingEl.style.display = 'none';
+    }
+    if (unavailableEl) {
+      unavailableEl.classList.add('hidden');
+      unavailableEl.style.display = 'none';
+    }
+
+    if (state !== INSPECT_DOC_STATES.SUCCESS && currentInspectDocBlobUrl) {
+      try {
+        URL.revokeObjectURL(currentInspectDocBlobUrl);
+      } catch (_) {}
+      currentInspectDocBlobUrl = null;
+    }
+
+    // Update viewport attribute for CSS-level mutual exclusivity
+    if (viewport) {
+      viewport.setAttribute('data-state', state);
+    }
+
+    // Step 2: Show ONLY the active state element
+    if (state === INSPECT_DOC_STATES.LOADING) {
+      if (loadingEl) {
+        loadingEl.classList.remove('hidden');
+        loadingEl.style.display = 'flex';
+      }
+      if (btnFullsize) {
+        btnFullsize.disabled = true;
+        btnFullsize.style.opacity = '0.5';
+        btnFullsize.style.pointerEvents = 'none';
+      }
+    } else if (state === INSPECT_DOC_STATES.SUCCESS) {
+      if (docImg) {
+        docImg.classList.remove('hidden');
+        docImg.style.display = 'block';
+      }
+      if (btnFullsize) {
+        btnFullsize.disabled = false;
+        btnFullsize.style.opacity = '1';
+        btnFullsize.style.pointerEvents = 'auto';
+      }
+    } else if (state === INSPECT_DOC_STATES.ERROR) {
+      if (unavailableEl) {
+        unavailableEl.classList.remove('hidden');
+        unavailableEl.style.display = 'flex';
+      }
+      if (btnFullsize) {
+        btnFullsize.disabled = true;
+        btnFullsize.style.opacity = '0.5';
+        btnFullsize.style.pointerEvents = 'none';
+      }
+    }
+  }
+
+  async function renderInspectionDocument(data) {
+    const container = document.getElementById('inspect-doc-container');
+    if (!container) return;
+
+    // Increment request sequence to prevent out-of-order race conditions
+    const thisSeq = ++inspectDocRequestSeq;
+
+    // Immediately enter STATE 1: LOADING
+    setInspectDocState(INSPECT_DOC_STATES.LOADING);
+
+    const idSpan = document.getElementById('inspect-doc-id');
+    const timeSpan = document.getElementById('inspect-doc-timestamp');
+    const typeBadge = document.getElementById('inspect-doc-type-badge');
+    const docImg = document.getElementById('inspect-doc-img');
+    const btnFullsize = document.getElementById('btn-inspect-fullsize');
+    const metaFilename = document.getElementById('inspect-meta-filename');
+    const metaFormat = document.getElementById('inspect-meta-format');
+    const metaStatus = document.getElementById('inspect-meta-status');
+    const metaIntegrity = document.getElementById('inspect-meta-integrity');
+
+    const screeningId = data ? data.screening_id : null;
+    if (idSpan) idSpan.textContent = screeningId || '--';
+    if (timeSpan) timeSpan.textContent = (data && data.timestamp) || 'N/A';
+    if (typeBadge) typeBadge.textContent = `TYPE: ${(data && data.doc_type) || 'UNKNOWN'}`;
+
+    if (metaFilename) metaFilename.textContent = (data && (data.document_filename || data.document_file)) || (screeningId ? `${screeningId}.jpg` : '--');
+    if (metaFormat) metaFormat.textContent = (data && (data.document_media_type || (data.doc_type ? `${data.doc_type} Image` : 'IMAGE/JPEG')) || '--').toUpperCase();
+    if (metaStatus) {
+      metaStatus.textContent = 'Fetching document...';
+      metaStatus.className = 'meta-val text-dim';
+    }
+    if (metaIntegrity) {
+      metaIntegrity.textContent = 'Verifying...';
+      metaIntegrity.className = 'meta-val text-dim';
+    }
+
+    // Revoke previous blob URL to prevent memory leaks and image bleed
+    if (currentInspectDocBlobUrl) {
+      URL.revokeObjectURL(currentInspectDocBlobUrl);
+      currentInspectDocBlobUrl = null;
+    }
+    if (docImg) docImg.src = '';
+
+    if (!screeningId) {
+      setInspectDocState(INSPECT_DOC_STATES.ERROR);
+      if (metaStatus) {
+        metaStatus.textContent = 'Original document unavailable';
+        metaStatus.className = 'meta-val text-red';
+      }
+      return;
+    }
+
+    try {
+      const docUrl = `/api/history/${encodeURIComponent(screeningId)}/document`;
+      const res = await fetch(docUrl, { headers: getAuthHeaders() });
+
+      // If another inspect click happened while waiting, drop stale response
+      if (thisSeq !== inspectDocRequestSeq) {
+        return;
+      }
+
+      if (!res.ok) {
+        // STATE 3: ERROR / UNAVAILABLE
+        setInspectDocState(INSPECT_DOC_STATES.ERROR);
+        if (metaStatus) {
+          metaStatus.textContent = 'Original document unavailable';
+          metaStatus.className = 'meta-val text-red';
+        }
+        if (metaIntegrity) {
+          metaIntegrity.textContent = 'Unavailable';
+          metaIntegrity.className = 'meta-val text-dim';
+        }
+        return;
+      }
+
+      const blob = await res.blob();
+      if (thisSeq !== inspectDocRequestSeq) {
+        return;
+      }
+
+      const newBlobUrl = URL.createObjectURL(blob);
+      currentInspectDocBlobUrl = newBlobUrl;
+
+      // Ensure docImg loads cleanly before transitioning to STATE 2: SUCCESS
+      if (docImg) {
+        docImg.onload = () => {
+          if (thisSeq === inspectDocRequestSeq) {
+            setInspectDocState(INSPECT_DOC_STATES.SUCCESS);
+            if (metaStatus) {
+              metaStatus.textContent = 'Stored Record Upload';
+              metaStatus.className = 'meta-val text-green';
+            }
+            if (metaIntegrity) {
+              metaIntegrity.textContent = 'Bit-for-Bit Authentic';
+              metaIntegrity.className = 'meta-val text-green';
+            }
+          }
+        };
+        docImg.onerror = () => {
+          if (thisSeq === inspectDocRequestSeq) {
+            setInspectDocState(INSPECT_DOC_STATES.ERROR);
+            if (metaStatus) {
+              metaStatus.textContent = 'Original document unavailable';
+              metaStatus.className = 'meta-val text-red';
+            }
+          }
+        };
+        docImg.src = newBlobUrl;
+      } else {
+        setInspectDocState(INSPECT_DOC_STATES.SUCCESS);
+      }
+
+      if (btnFullsize) {
+        btnFullsize.onclick = () => {
+          openFullSizeModal(newBlobUrl, screeningId, data ? data.doc_type : '');
+        };
+      }
+    } catch (e) {
+      if (thisSeq === inspectDocRequestSeq) {
+        setInspectDocState(INSPECT_DOC_STATES.ERROR);
+        if (metaStatus) {
+          metaStatus.textContent = 'Original document unavailable';
+          metaStatus.className = 'meta-val text-red';
+        }
+      }
+    }
+  }
+
+  function openFullSizeModal(imgUrl, screeningId, docType) {
+    const modal = document.getElementById('fullsize-modal');
+    const modalImg = document.getElementById('fullsize-modal-img');
+    const modalTitle = document.getElementById('fullsize-modal-title');
+    const modalNewTab = document.getElementById('fullsize-modal-newtab');
+
+    if (!modal || !modalImg) return;
+
+    modalImg.src = imgUrl;
+    if (modalTitle) modalTitle.textContent = `${docType || 'Document'} (${screeningId || ''})`;
+    if (modalNewTab) modalNewTab.href = imgUrl;
+
+    modal.classList.remove('hidden');
+  }
+
+  function closeFullSizeModal() {
+    const modal = document.getElementById('fullsize-modal');
+    if (modal) modal.classList.add('hidden');
+  }
+
+  const btnCloseFullsize = document.getElementById('btn-close-fullsize');
+  const fullsizeBackdrop = document.getElementById('fullsize-modal-backdrop');
+  if (btnCloseFullsize) btnCloseFullsize.addEventListener('click', closeFullSizeModal);
+  if (fullsizeBackdrop) fullsizeBackdrop.addEventListener('click', closeFullSizeModal);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeFullSizeModal();
+  });
+
+  // =========================================================================
   // 6B. RENDER ALL-IN-ONE MASTER FORENSIC DOSSIER
   // =========================================================================
   function renderMasterDossier(data) {
@@ -1134,12 +1434,55 @@
       document.querySelectorAll('.btn-view-history-record').forEach(btn => {
         btn.addEventListener('click', async () => {
           const id = btn.dataset.id;
-          const repRes = await fetch(`/api/history/${id}`, { headers: getAuthHeaders() });
-          if (repRes.ok) {
-            const rep = await repRes.json();
-            currentReport = rep;
-            renderScreeningResults(rep);
-            switchTab('tab-risk');
+          const thisInspectSeq = ++historyInspectSeq;
+
+          // Immediately switch tab and enter STATE 1: LOADING
+          switchTab('tab-risk');
+          setInspectDocState(INSPECT_DOC_STATES.LOADING);
+          const idSpan = document.getElementById('inspect-doc-id');
+          if (idSpan) idSpan.textContent = id;
+          const timeSpan = document.getElementById('inspect-doc-timestamp');
+          if (timeSpan) timeSpan.textContent = 'Loading...';
+          const typeBadge = document.getElementById('inspect-doc-type-badge');
+          if (typeBadge) typeBadge.textContent = 'TYPE: ...';
+          const metaStatus = document.getElementById('inspect-meta-status');
+          if (metaStatus) {
+            metaStatus.textContent = 'Loading original document...';
+            metaStatus.className = 'meta-val text-dim';
+          }
+          const inspContainer = document.getElementById('inspect-doc-container');
+          if (inspContainer) {
+            setTimeout(() => {
+              inspContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 60);
+          }
+
+          try {
+            const repRes = await fetch(`/api/history/${id}`, { headers: getAuthHeaders() });
+            if (thisInspectSeq !== historyInspectSeq) {
+              // Newer inspect was clicked; ignore stale response
+              return;
+            }
+            if (repRes.ok) {
+              const rep = await repRes.json();
+              if (thisInspectSeq !== historyInspectSeq) return;
+              currentReport = rep;
+              renderScreeningResults(rep);
+            } else {
+              setInspectDocState(INSPECT_DOC_STATES.ERROR);
+              if (metaStatus) {
+                metaStatus.textContent = 'Original document unavailable';
+                metaStatus.className = 'meta-val text-red';
+              }
+            }
+          } catch (e) {
+            if (thisInspectSeq === historyInspectSeq) {
+              setInspectDocState(INSPECT_DOC_STATES.ERROR);
+              if (metaStatus) {
+                metaStatus.textContent = 'Original document unavailable';
+                metaStatus.className = 'meta-val text-red';
+              }
+            }
           }
         });
       });

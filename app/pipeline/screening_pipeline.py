@@ -12,6 +12,7 @@ Orchestrates the 7-step Border Control Screening Workflow:
 6. Biometric Face Verification: 1:1 Document Photo vs Live Passenger Photo
 7. Risk Assessment Engine & Local SQLite Audit Trail Logging
 """
+import os
 import time
 import uuid
 from datetime import datetime
@@ -29,6 +30,7 @@ from app.pipeline.cross_verifier import cross_verify_documents
 from app.pipeline.risk_engine import compute_risk_assessment
 from app.database.db_manager import log_screening
 from app.config import (
+    UPLOADS_DIR,
     DOC_TYPE_PASSPORT,
     DOC_TYPE_VISA,
     DOC_TYPE_DRIVING_LICENSE,
@@ -47,7 +49,10 @@ def run_truthlens_screening(
     doc_type_hint: Optional[str] = None,
     doc_number_override: Optional[str] = None,
     person_name_override: Optional[str] = None,
-    claimed_doc_type: Optional[str] = None
+    claimed_doc_type: Optional[str] = None,
+    raw_doc_bytes: Optional[bytes] = None,
+    doc_filename: Optional[str] = None,
+    screening_id_override: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Executes the full end-to-end AI document screening pipeline.
@@ -58,6 +63,9 @@ def run_truthlens_screening(
     - doc_type_hint / claimed_doc_type: Optional manual document type hint ('PASSPORT', 'VISA', etc.)
     - doc_number_override: Optional user-confirmed identity or document number
     - person_name_override: Optional user-confirmed passenger name
+    - raw_doc_bytes: Optional original document raw bytes to persist for inspection
+    - doc_filename: Optional original upload filename
+    - screening_id_override: Optional fixed screening ID
     
     Returns:
     - Complete structured screening audit report with risk score, ELA heatmap,
@@ -66,7 +74,7 @@ def run_truthlens_screening(
     start_time = time.time()
     if claimed_doc_type and not doc_type_hint:
         doc_type_hint = claimed_doc_type
-    screening_id = f"TL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    screening_id = screening_id_override or f"TL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Ensure doc_image is PIL Image for metadata inspection
@@ -76,6 +84,44 @@ def run_truthlens_screening(
         pil_doc = doc_image_input
     else:
         raise ValueError("Invalid document image input type")
+
+    # Determine extension and media type for stored document
+    ext = ".jpg"
+    media_type = "image/jpeg"
+    if doc_filename and "." in doc_filename:
+        ext_candidate = os.path.splitext(doc_filename)[1].lower()
+        if ext_candidate in [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif"]:
+            ext = ext_candidate
+    elif isinstance(pil_doc, Image.Image) and pil_doc.format:
+        fmt = (pil_doc.format or "").lower()
+        if fmt == "jpeg":
+            ext = ".jpg"
+        elif fmt in ["png", "webp", "bmp", "tiff"]:
+            ext = f".{fmt}"
+
+    if ext in [".jpg", ".jpeg"]:
+        media_type = "image/jpeg"
+    elif ext == ".png":
+        media_type = "image/png"
+    elif ext == ".webp":
+        media_type = "image/webp"
+    elif ext == ".bmp":
+        media_type = "image/bmp"
+    elif ext in [".tiff", ".tif"]:
+        media_type = "image/tiff"
+
+    # Persist the exact document file for history inspection
+    try:
+        dest_path = UPLOADS_DIR / f"{screening_id}{ext}"
+        if raw_doc_bytes:
+            dest_path.write_bytes(raw_doc_bytes)
+        else:
+            if pil_doc.mode in ("RGBA", "P"):
+                pil_doc.convert("RGB").save(dest_path, format="JPEG", quality=95)
+            else:
+                pil_doc.save(dest_path, format="JPEG", quality=95)
+    except Exception as e:
+        print(f"[STORAGE WARNING] Failed to persist original document upload: {e}")
 
     # =========================================================================
     # STEP 1: OCR EXTRACTION & MRZ PARSER
@@ -399,6 +445,10 @@ def run_truthlens_screening(
         "screening_id": screening_id,
         "timestamp": timestamp_str,
         "doc_type": doc_type,
+        "document_file": f"{screening_id}{ext}",
+        "document_filename": doc_filename or f"{screening_id}{ext}",
+        "document_media_type": media_type,
+        "document_image_url": f"/api/history/{screening_id}/document",
         "verdict": verdict,
         "risk_level": risk_level,
         "risk_score": risk_score,

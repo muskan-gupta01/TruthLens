@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=6.0" />
+  <link rel="stylesheet" href="/static/css/style.css?v=7.0" />
 </head>
 
 <body>
@@ -808,6 +808,68 @@
         </p>
       </div>
 
+      <!-- Original Document Inspection Preview Card -->
+      <div class="cyber-card inspect-doc-card" id="inspect-doc-container">
+        <div class="card-header inspect-card-header">
+          <div class="inspect-header-left">
+            <span class="inspect-icon">📑</span>
+            <div>
+              <h3 class="inspect-title">Original Screened Document</h3>
+              <p class="inspect-subtitle" id="inspect-doc-subtitle">
+                Record: <strong id="inspect-doc-id" style="font-family: var(--font-mono);">--</strong>
+                <span class="meta-sep">•</span> Screened: <span id="inspect-doc-timestamp">--</span>
+              </p>
+            </div>
+          </div>
+          <div class="inspect-header-actions">
+            <span class="badge-tech" id="inspect-doc-type-badge">TYPE: --</span>
+            <button type="button" class="cyber-btn btn-secondary btn-sm" id="btn-inspect-fullsize" title="View document in full resolution">
+              🔍 View Full Size
+            </button>
+          </div>
+        </div>
+        <div class="card-body inspect-doc-body">
+          <div class="inspect-preview-layout">
+            <div class="inspect-preview-viewport" id="inspect-preview-viewport">
+              <img id="inspect-doc-img" class="inspect-preview-img hidden" src="" alt="Original Document" />
+              <div id="inspect-doc-loading" class="inspect-doc-status hidden">
+                <div class="inspect-spinner"></div>
+                <span>Loading original document...</span>
+              </div>
+              <div id="inspect-doc-unavailable" class="inspect-doc-status text-muted hidden">
+                <span class="unavailable-icon">⚠️</span>
+                <span class="unavailable-text">Original document unavailable</span>
+              </div>
+            </div>
+            <div class="inspect-doc-sidebar">
+              <div class="inspect-meta-card">
+                <h4 class="inspect-meta-title">Document File Metadata</h4>
+                <div class="inspect-meta-row">
+                  <span class="meta-label">Stored File:</span>
+                  <span class="meta-val font-mono" id="inspect-meta-filename">--</span>
+                </div>
+                <div class="inspect-meta-row">
+                  <span class="meta-label">MIME / Format:</span>
+                  <span class="meta-val font-mono" id="inspect-meta-format">--</span>
+                </div>
+                <div class="inspect-meta-row">
+                  <span class="meta-label">Storage Status:</span>
+                  <span class="meta-val text-green" id="inspect-meta-status">Stored Record Upload</span>
+                </div>
+                <div class="inspect-meta-row">
+                  <span class="meta-label">Integrity Verification:</span>
+                  <span class="meta-val text-green" id="inspect-meta-integrity">Bit-for-Bit Authentic</span>
+                </div>
+              </div>
+              <div class="inspect-tip-box">
+                <span class="inspect-tip-icon">ℹ️</span>
+                <span class="inspect-tip-text">Authentic stored file from intake. Preserved exactly as uploaded by officer or captured at border inspection.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Verdict Banner -->
       <div class="verdict-banner banner-pending" id="master-verdict-banner">
         <div class="verdict-icon" id="master-verdict-icon">🛡️</div>
@@ -1059,8 +1121,32 @@
     </div>
   </div>
 
+  <!-- Full-Resolution Document Inspection Modal -->
+  <div id="fullsize-modal" class="cyber-modal hidden">
+    <div class="cyber-modal-backdrop" id="fullsize-modal-backdrop"></div>
+    <div class="cyber-modal-dialog modal-fullsize-dialog">
+      <div class="cyber-modal-header">
+        <div class="modal-title-group">
+          <span class="modal-badge">FULL RESOLUTION INSPECTION</span>
+          <h3 id="fullsize-modal-title">Original Screened Document</h3>
+        </div>
+        <div class="modal-header-actions">
+          <a id="fullsize-modal-newtab" href="#" target="_blank" class="cyber-btn btn-secondary btn-sm" title="Open full image in a new browser tab">
+            ⤢ Open in New Tab
+          </a>
+          <button type="button" class="btn-close-modal" id="btn-close-fullsize" title="Close modal">✕</button>
+        </div>
+      </div>
+      <div class="cyber-modal-body fullsize-image-body">
+        <div class="fullsize-img-container">
+          <img id="fullsize-modal-img" src="" alt="Full Resolution Document" />
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Client Application Script -->
-  <script src="/static/js/app.js?v=6.0"></script>
+  <script src="/static/js/app.js?v=7.0"></script>
 </body>
 
 </html>
