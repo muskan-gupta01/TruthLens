@@ -385,9 +385,9 @@ def create_presentation():
     p.font.color.rgb = COLOR_NEON
 
     out_points = [
-        ("Match Confirmed (≥ 70%)", "Clear 1:1 match. Document photo corresponds to presented individual (adds 0 risk points)."),
-        ("Possible Mismatch (48%–69%)", "Borderline similarity. Flags warning for security officer physical inspection (adds +18 risk points)."),
-        ("Biometric Mismatch (< 48%)", "Severe facial discrepancy. Critical security alert for suspected identity impersonation (adds +35 risk points)."),
+        ("Match Confirmed (≥ 40.0%)", "Clear 1:1 match. Document photo corresponds to presented individual (adds 0 risk points)."),
+        ("Possible Mismatch (34.0%–39.9%)", "Borderline similarity. Flags warning for security officer physical inspection (adds +18 risk points)."),
+        ("Biometric Mismatch (< 34.0%)", "Severe facial discrepancy. Critical security alert for suspected identity impersonation (adds +35 risk points)."),
         ("Visual Audit Previews", "Renders document face crop side-by-side with live passenger face crop directly on the dashboard.")
     ]
     for title, desc in out_points:

@@ -82,8 +82,9 @@ Use this script during your 5-to-7 minute presentation. You can speak in English
 > - The system automatically detects and crops the facial portrait from the travel document using the **YuNet 5-landmark neural detector**.
 > - It captures the live passenger photo via checkpoint camera or file upload, aligns eye landmarks, and extracts an L2-normalized 128-dimensional embedding using the **SFace deep neural network**.
 > - It outputs a calibrated match percentage and side-by-side cropped preview:
->   - $\ge 60\%$: **MATCH CONFIRMED**
->   - $< 48\%$: **CRITICAL ALERT: BIOMETRIC MISMATCH** (Impersonation caught instantly)."
+>   - $\ge 40.0\%$: **MATCH CONFIRMED** (Biometric clearance verified)
+>   - $34.0\% - 39.9\%$: **POSSIBLE MISMATCH** (Borderline score — flags traveler for physical inspection)
+>   - $< 34.0\%$: **CRITICAL ALERT: BIOMETRIC MISMATCH** (Impersonation caught instantly)."
 >
 > **Script (Hinglish):**
 > "Impersonation rokne ke liye Module 4 document se facial photo crop karta hai aur live checkpoint camera se YuNet + SFace deep neural network ke zariye 128-D cosine embedding match karta hai. Match percentage aur side-by-side cropped comparison turant display hota hai."
@@ -124,7 +125,7 @@ Use this script during your 5-to-7 minute presentation. You can speak in English
 > 
 > *(Follow the steps in DEMO_SCRIPT.md)*:
 > 1. **Step 1 (Fast Genuine Clearance):** Screen Genuine US Passport + Matching Live Photo $\rightarrow$ Sub-second verification, ICAO 100% verified, 62.8% SFace match, 0/100 Risk Score.
-> 2. **Step 2 (Tampered Forgery Caught):** Screen Tampered Passport with Photo Splice + Impersonator $\rightarrow$ ELA glowing red spliced box, 35.3% face mismatch alert, 63/100 High Risk.
+> 2. **Step 2 (Tampered Forgery Caught):** Screen Tampered Passport with Photo Splice + Impersonator $\rightarrow$ ELA glowing red spliced box, 35.3% biometric alert (Possible Mismatch under 40% threshold), 63/100 High Risk.
 > 3. **Step 3 (Audit Integrity & Privacy):** Switch to 'Screening History' (show DPDP masked numbers), click 'Inspect' (reveal full unmasked dossier), then open 'Audit Integrity' tab and click **Verify Chain Integrity** $\rightarrow$ Proves 100% cryptographic ledger continuity with zero broken links!
 
 ---
