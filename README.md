@@ -1,5 +1,5 @@
 # TruthLens — AI-Based Fake Identity & Document Screening System
-**Smart India Hackathon 2024 | Problem Statement: SIH26188 | Ministry of Home Affairs (MHA) | Category: Blockchain & Cybersecurity**
+**Smart India Hackathon 2026 | Problem Statement: SIH26188 | Ministry of Home Affairs (MHA) | Category: Blockchain & Cybersecurity**
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![OpenCV](https://img.shields.io/badge/Computer%20Vision-OpenCV%20%E2%89%A54.8-5C3EE8?style=flat&logo=opencv&logoColor=white)](https://opencv.org/)
