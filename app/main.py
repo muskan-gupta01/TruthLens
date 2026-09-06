@@ -613,9 +613,7 @@ def screen_document(
             live_image_input=live_img,
             doc_type_hint=doc_type,
             doc_number_override=doc_number,
-            person_name_override=person_name,
-            raw_doc_bytes=raw_doc_bytes,
-            doc_filename=doc_filename
+            person_name_override=person_name
         )
         return JSONResponse(content=result)
     except Exception as e:
