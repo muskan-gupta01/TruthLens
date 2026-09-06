@@ -9,6 +9,7 @@ Handles:
 
 NOTICE: All watchlist data is simulated mock data for demonstration purposes.
 """
+import re
 import sqlite3
 import json
 import uuid
