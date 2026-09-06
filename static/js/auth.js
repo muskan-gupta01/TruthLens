@@ -81,6 +81,19 @@
   if (openSignupBtn) openSignupBtn.addEventListener("click", openSignupModal);
   if (getStartedBtn) getStartedBtn.addEventListener("click", handleGetStarted);
 
+  // Toggle password visibility without changing the submitted value.
+  document.querySelectorAll(".password-toggle").forEach((toggleBtn) => {
+    toggleBtn.addEventListener("click", function () {
+      const passwordInput = document.getElementById(toggleBtn.dataset.passwordTarget);
+      if (!passwordInput) return;
+
+      const isHidden = passwordInput.type === "password";
+      passwordInput.type = isHidden ? "text" : "password";
+      toggleBtn.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+      toggleBtn.setAttribute("title", isHidden ? "Hide password" : "Show password");
+    });
+  });
+
   // Bind Closers
   if (closeLoginBtn) closeLoginBtn.addEventListener("click", closeAllModals);
   if (closeSignupBtn) closeSignupBtn.addEventListener("click", closeAllModals);

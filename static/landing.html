@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/landing.css?v=3.0">
+  <link rel="stylesheet" href="/static/css/landing.css?v=3.1">
 </head>
 
 <body>
@@ -215,7 +215,10 @@
         <input type="email" id="loginEmail" placeholder="officer@truthlens.gov.in" required autocomplete="username">
 
         <label for="loginPassword">Password</label>
-        <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+        <div class="password-field">
+          <input type="password" id="loginPassword" placeholder="Enter your password" required autocomplete="current-password">
+          <button type="button" class="password-toggle" data-password-target="loginPassword" aria-label="Show password" title="Show password">&#128065;</button>
+        </div>
 
         <button type="submit" class="primary-btn form-submit" id="btnLoginSubmit">Log In</button>
       </form>
@@ -262,7 +265,7 @@
         <input type="email" id="signupEmail" placeholder="Enter your email" required autocomplete="email">
 
         <label for="phone">Phone Number</label>
-        <input type="tel" id="phone" placeholder="+91 98765 43210" autocomplete="tel">
+        <input type="tel" id="phone" placeholder="XXX-XXXXX-XXXX" autocomplete="tel">
 
         <label for="gender">Gender</label>
         <select id="gender">
@@ -273,10 +276,16 @@
         </select>
 
         <label for="signupPassword">Create Password</label>
-        <input type="password" id="signupPassword" placeholder="Minimum 6 characters" required autocomplete="new-password">
+        <div class="password-field">
+          <input type="password" id="signupPassword" placeholder="Minimum 6 characters" required autocomplete="new-password">
+          <button type="button" class="password-toggle" data-password-target="signupPassword" aria-label="Show password" title="Show password">&#128065;</button>
+        </div>
 
         <label for="confirmPassword">Confirm Password</label>
-        <input type="password" id="confirmPassword" placeholder="Confirm your password" required autocomplete="new-password">
+        <div class="password-field">
+          <input type="password" id="confirmPassword" placeholder="Confirm your password" required autocomplete="new-password">
+          <button type="button" class="password-toggle" data-password-target="confirmPassword" aria-label="Show password" title="Show password">&#128065;</button>
+        </div>
 
         <button type="submit" class="primary-btn form-submit" id="btnSignupSubmit">Sign Up</button>
       </form>
@@ -288,6 +297,6 @@
     </div>
   </div>
 
-  <script src="/static/js/auth.js?v=3.0"></script>
+  <script src="/static/js/auth.js?v=3.1"></script>
 </body>
 </html>
