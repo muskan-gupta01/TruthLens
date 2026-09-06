@@ -16,6 +16,7 @@ Endpoints:
 """
 import io
 import os
+import re
 import base64
 from pathlib import Path
 from typing import Optional, Dict, Any
@@ -30,6 +31,7 @@ from app.config import (
     STATIC_DIR,
     SAMPLE_DOCS_DIR,
     TEMP_DIR,
+    UPLOADS_DIR,
     TESSERACT_PATH
 )
 from app.pipeline.screening_pipeline import run_truthlens_screening
@@ -55,10 +57,23 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Security & Upload Configuration
+IS_PRODUCTION = os.environ.get("ENVIRONMENT", "development").lower() in ["production", "prod"]
+MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE", 15 * 1024 * 1024))  # 15 MB limit
+Image.MAX_IMAGE_PIXELS = 25_000_000  # Guard against PIL decompression bombs (25 MP)
+ALLOWED_IMAGE_FORMATS = {"JPEG", "JPG", "PNG", "WEBP", "TIFF", "BMP"}
+
+ALLOWED_ORIGINS = [
+    orig.strip() for orig in os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",") if orig.strip()
+]
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,38 +84,115 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 def _extract_session_token(request: Request) -> Optional[str]:
-    """Extracts session token from cookie, Authorization header, or query param."""
+    """Extracts session token from cookie or Authorization Bearer header (avoids URL query param)."""
     token = request.cookies.get("session_token")
     if token:
         return token
     auth_header = request.headers.get("authorization")
     if auth_header and auth_header.lower().startswith("bearer "):
         return auth_header[7:].strip()
-    return request.query_params.get("token")
+    return None
+
+
+def _get_current_user(request: Request) -> Dict[str, Any]:
+    """Validates session token for sensitive API endpoints; raises 401 if unauthenticated."""
+    token = _extract_session_token(request)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required. Please log in.")
+    user = validate_user_session(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session. Please log in again.")
+    return user
+
+
+def _resolve_safe_sample_path(sample_id: str) -> Optional[Path]:
+    """
+    Safely resolves sample file path under SAMPLE_DOCS_DIR.
+    Prevents path traversal ('../', '..\\', absolute paths, path separators).
+    """
+    if not sample_id or not isinstance(sample_id, str):
+        return None
+    raw_id = sample_id.strip()
+    # Reject any path separators, parent directory markers, or traversal encodings
+    if ".." in raw_id or "/" in raw_id or "\\" in raw_id or "%" in raw_id:
+        return None
+    # Strictly allow only valid alphanumeric sample identifiers
+    if not re.match(r"^[A-Za-z0-9_\-]+(\.(jpg|jpeg|png))?$", raw_id):
+        return None
+
+    clean_id = os.path.splitext(raw_id)[0]
+    base_dir = SAMPLE_DOCS_DIR.resolve()
+    for ext in [".jpg", ".png", ".jpeg"]:
+        candidate = (SAMPLE_DOCS_DIR / f"{clean_id}{ext}").resolve()
+        try:
+            candidate.relative_to(base_dir)
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        except ValueError:
+            return None
+    return None
+
+
+def _decode_image_bytes(contents: bytes) -> Image.Image:
+    """Safely decodes raw image bytes into an EXIF-oriented PIL Image with size, format, and decompression bomb guards."""
+    if len(contents) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded file exceeds maximum permitted limit of {MAX_UPLOAD_SIZE // (1024 * 1024)}MB."
+        )
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    try:
+        verify_img = Image.open(io.BytesIO(contents))
+        verify_img.verify()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Corrupted or invalid image file: {e}")
+
+    try:
+        img = Image.open(io.BytesIO(contents))
+        fmt = (img.format or "").upper()
+        if fmt and fmt not in ALLOWED_IMAGE_FORMATS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported image format '{fmt}'. Permitted: {', '.join(ALLOWED_IMAGE_FORMATS)}"
+            )
+        img = ImageOps.exif_transpose(img)
+        return img.convert("RGB")
+    except HTTPException:
+        raise
+    except Image.DecompressionBombError:
+        raise HTTPException(status_code=400, detail="Image exceeds maximum dimensions (decompression bomb protection).")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process image: {e}")
 
 
 def _decode_image_file(upload: UploadFile) -> Image.Image:
-    """Safely decodes an uploaded file into an EXIF-oriented PIL Image."""
-    contents = upload.file.read()
-    img = Image.open(io.BytesIO(contents))
-    try:
-        img = ImageOps.exif_transpose(img)
-    except Exception:
-        pass
-    return img.convert("RGB")
+    """Safely decodes an uploaded file into an EXIF-oriented PIL Image with size, format, and decompression bomb guards."""
+    contents = upload.file.read(MAX_UPLOAD_SIZE + 1)
+    return _decode_image_bytes(contents)
 
 
 def _decode_base64_image(b64_str: str) -> Image.Image:
-    """Decodes a base64 Data URI string into an EXIF-oriented PIL Image."""
+    """Decodes a base64 Data URI string into an EXIF-oriented PIL Image with size guards."""
     if "," in b64_str:
         b64_str = b64_str.split(",", 1)[1]
-    decoded = base64.b64decode(b64_str)
-    img = Image.open(io.BytesIO(decoded))
+    if len(b64_str) > (MAX_UPLOAD_SIZE * 4 // 3):
+        raise HTTPException(status_code=413, detail="Base64 payload exceeds maximum permitted upload limit.")
     try:
-        img = ImageOps.exif_transpose(img)
+        decoded = base64.b64decode(b64_str)
     except Exception:
-        pass
-    return img.convert("RGB")
+        raise HTTPException(status_code=400, detail="Invalid base64 encoding.")
+    if len(decoded) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="Decoded image exceeds maximum upload size.")
+    try:
+        img = Image.open(io.BytesIO(decoded))
+        img = ImageOps.exif_transpose(img)
+        return img.convert("RGB")
+    except Image.DecompressionBombError:
+        raise HTTPException(status_code=400, detail="Image exceeds maximum dimensions (decompression bomb protection).")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to process base64 image: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -215,6 +307,7 @@ async def api_register(request: Request):
         value=token,
         httponly=True,
         samesite="lax",
+        secure=IS_PRODUCTION,
         max_age=7 * 24 * 3600,
         path="/"
     )
@@ -260,6 +353,7 @@ async def api_login(request: Request):
         value=token,
         httponly=True,
         samesite="lax",
+        secure=IS_PRODUCTION,
         max_age=7 * 24 * 3600,
         path="/"
     )
@@ -329,8 +423,9 @@ async def health_check():
 
 
 @app.get("/api/stats")
-async def get_stats():
-    """Returns dashboard statistics (total screened, verified, high risk, distribution)."""
+async def get_stats(request: Request):
+    """Returns dashboard statistics (requires authenticated session)."""
+    _get_current_user(request)
     return get_dashboard_statistics()
 
 
@@ -426,18 +521,18 @@ async def list_sample_documents():
 
 @app.get("/api/samples/{sample_id}")
 async def get_sample_image(sample_id: str):
-    """Serves a test sample image file."""
-    clean_id = sample_id.replace(".jpg", "").replace(".png", "")
-    filename = f"{clean_id}.jpg"
-    file_path = SAMPLE_DOCS_DIR / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Sample image not found")
-    return FileResponse(path=str(file_path), media_type="image/jpeg")
+    """Serves a test sample image file safely."""
+    safe_path = _resolve_safe_sample_path(sample_id)
+    if not safe_path:
+        raise HTTPException(status_code=404, detail="Sample image not found or invalid sample ID")
+    return FileResponse(path=str(safe_path), media_type="image/jpeg")
 
 
 @app.post("/api/screen")
-async def screen_document(
+def screen_document(
+    request: Request,
     file: Optional[UploadFile] = File(None),
+    document_file: Optional[UploadFile] = File(None),
     live_file: Optional[UploadFile] = File(None),
     sample_id: Optional[str] = Form(None),
     live_sample_id: Optional[str] = Form(None),
@@ -448,35 +543,45 @@ async def screen_document(
     person_name: Optional[str] = Form(None)
 ):
     """
-    Main Border Screening Endpoint:
-    Accepts:
-    1. Document image (File, Sample ID, or Base64)
-    2. Optional Live Passenger Photo (File, Live Sample ID, Webcam Base64)
-    3. Optional Document Type Hint
-    4. Optional Manual / Confirmed Document Number & Passenger Name
-    Executes the 7-step screening pipeline and returns full audit report.
+    Main Border Screening Endpoint.
+    Executed synchronously in FastAPI threadpool to handle CPU-heavy CV/forensics.
+    Requires authenticated officer session.
     """
+    _get_current_user(request)
     doc_img = None
     live_img = None
+    raw_doc_bytes = None
+    doc_filename = None
 
     # Resolve document image
-    if file and file.filename:
+    effective_file = file or document_file
+    if effective_file and effective_file.filename:
         try:
-            doc_img = _decode_image_file(file)
+            raw_doc_bytes = effective_file.file.read(MAX_UPLOAD_SIZE + 1)
+            doc_img = _decode_image_bytes(raw_doc_bytes)
+            doc_filename = effective_file.filename
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid document image: {e}")
     elif sample_id:
-        clean_id = sample_id.replace(".jpg", "").replace(".png", "")
-        file_path = SAMPLE_DOCS_DIR / f"{clean_id}.jpg"
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail=f"Sample document '{sample_id}' not found")
+        safe_path = _resolve_safe_sample_path(sample_id)
+        if not safe_path:
+            raise HTTPException(status_code=404, detail=f"Sample document '{sample_id}' not found or invalid")
         try:
-            doc_img = Image.open(file_path).convert("RGB")
+            raw_doc_bytes = safe_path.read_bytes()
+            doc_img = Image.open(safe_path).convert("RGB")
+            doc_filename = safe_path.name
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to open sample: {e}")
     elif image_base64:
         try:
-            doc_img = _decode_base64_image(image_base64)
+            b64_clean = image_base64.split(",", 1)[1] if "," in image_base64 else image_base64
+            raw_doc_bytes = base64.b64decode(b64_clean)
+            doc_img = _decode_image_bytes(raw_doc_bytes)
+            doc_filename = "document_upload.jpg"
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to decode base64 document: {e}")
     else:
@@ -489,11 +594,10 @@ async def screen_document(
         except Exception:
             pass
     elif live_sample_id:
-        clean_live_id = live_sample_id.replace(".jpg", "").replace(".png", "")
-        live_path = SAMPLE_DOCS_DIR / f"{clean_live_id}.jpg"
-        if live_path.exists():
+        safe_live_path = _resolve_safe_sample_path(live_sample_id)
+        if safe_live_path:
             try:
-                live_img = Image.open(live_path).convert("RGB")
+                live_img = Image.open(safe_live_path).convert("RGB")
             except Exception:
                 pass
     elif live_base64:
@@ -509,7 +613,9 @@ async def screen_document(
             live_image_input=live_img,
             doc_type_hint=doc_type,
             doc_number_override=doc_number,
-            person_name_override=person_name
+            person_name_override=person_name,
+            raw_doc_bytes=raw_doc_bytes,
+            doc_filename=doc_filename
         )
         return JSONResponse(content=result)
     except Exception as e:
@@ -519,8 +625,9 @@ async def screen_document(
 
 
 @app.get("/api/history")
-async def get_screening_history_endpoint():
-    """Retrieves previous screening audit records from SQLite."""
+async def get_screening_history_endpoint(request: Request):
+    """Retrieves previous screening audit records from SQLite (requires authentication)."""
+    _get_current_user(request)
     history = get_history(limit=50)
     return {"history": history}
 
@@ -533,17 +640,69 @@ async def clear_screening_history_endpoint():
 
 
 @app.get("/api/history/{screening_id}")
-async def get_screening_report_endpoint(screening_id: str):
-    """Retrieves full JSON audit record for a given screening ID."""
+async def get_screening_report_endpoint(screening_id: str, request: Request):
+    """Retrieves full JSON audit record for a given screening ID (requires authentication)."""
+    _get_current_user(request)
     report = get_screening_by_id(screening_id)
     if not report:
         raise HTTPException(status_code=404, detail="Screening report not found")
     return JSONResponse(content=report)
 
 
+@app.get("/api/history/{screening_id}/document")
+async def get_history_document_endpoint(screening_id: str, request: Request):
+    """
+    Retrieves the authentic uploaded document file associated with a screening record.
+    Protected by officer authentication and strict path traversal guards.
+    """
+    _get_current_user(request)
+
+    # Reject path traversal and ensure strict screening ID format
+    if not screening_id or not re.match(r"^[A-Za-z0-9\-]+$", screening_id):
+        raise HTTPException(status_code=400, detail="Invalid screening ID format")
+
+    base_dir = UPLOADS_DIR.resolve()
+    matched_file = None
+
+    for ext in [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif"]:
+        candidate = (UPLOADS_DIR / f"{screening_id}{ext}").resolve()
+        try:
+            candidate.relative_to(base_dir)
+            if candidate.parent == base_dir and candidate.exists() and candidate.is_file():
+                matched_file = candidate
+                break
+        except (ValueError, Exception):
+            continue
+
+    if not matched_file:
+        raise HTTPException(status_code=404, detail="Original document unavailable")
+
+    ext = matched_file.suffix.lower()
+    media_type_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+        ".tiff": "image/tiff",
+        ".tif": "image/tiff"
+    }
+    media_type = media_type_map.get(ext, "image/jpeg")
+
+    return FileResponse(
+        path=str(matched_file),
+        media_type=media_type,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=3600"
+        }
+    )
+
+
 @app.get("/api/mock-db")
-async def get_mock_database_endpoint():
-    """Returns all mock border verification database records."""
+async def get_mock_database_endpoint(request: Request):
+    """Returns all mock border verification database records (requires authentication)."""
+    _get_current_user(request)
     records = get_all_mock_watchlists()
     return {
         "disclaimer": "DEMO DATA – NOT CONNECTED TO GOVERNMENT DATABASES",

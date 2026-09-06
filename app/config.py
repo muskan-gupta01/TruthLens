@@ -12,9 +12,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 SAMPLE_DOCS_DIR = BASE_DIR / "sample_docs"
 TEMP_DIR = BASE_DIR / "temp"
+UPLOADS_DIR = BASE_DIR / "uploads"
 
 TEMP_DIR.mkdir(parents=True, exist_ok=True)
 SAMPLE_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Tesseract executable configuration
 # Detect system path or standard Windows install paths

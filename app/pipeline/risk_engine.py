@@ -3,7 +3,7 @@ Dynamic Risk Assessment & Explainable Decision Engine
 TruthLens - AI-Based Fake Identity & Document Screening System
 SIH26188: Ministry of Home Affairs - Blockchain & Cybersecurity
 
-Calculates a calibrated risk score (0-100) and aggregates contributing risk factors from:
+Calculates a heuristic risk score (0-100) and aggregates contributing risk factors from:
 1. Document Validation failures & Checksum mismatches
 2. Expired document / Border validity violations
 3. Mock Database Watchlist & Blacklist alerts
@@ -72,6 +72,25 @@ def compute_risk_assessment(
             is_expired = True
             break
 
+    # Inspect specifically for mathematical checksum failure vs OCR uncertainty
+    has_checksum_failure = False
+    has_checksum_warning = False
+    checksum_check_name = ""
+    checksum_failure_desc = ""
+    checksum_warning_desc = ""
+
+    for check in validation_report.get("checklist", []):
+        chk_title = check.get("check", "")
+        if any(k in chk_title for k in ["Checksum", "Verhoeff", "ICAO", "PAN Syntax"]):
+            if check.get("status") == "FAIL":
+                has_checksum_failure = True
+                checksum_check_name = chk_title
+                checksum_failure_desc = check.get("detail", "Mathematical checksum verification failed.")
+            elif check.get("status") == "WARN":
+                has_checksum_warning = True
+                checksum_check_name = chk_title
+                checksum_warning_desc = check.get("detail", "Checksum uncertainty due to optical scan noise.")
+
     if is_expired:
         pts = 30
         raw_score += pts
@@ -82,6 +101,29 @@ def compute_risk_assessment(
             "name": "Document Validity Expired",
             "description": "Travel document has exceeded official expiry date. Inadmissible for border transit."
         })
+
+    # Process mathematical checksum failure or validation failures
+    if has_checksum_failure:
+        pts_cs = 40
+        raw_score += pts_cs
+        factors.append({
+            "category": "CHECKSUM_FAILURE",
+            "points": pts_cs,
+            "severity": "HIGH",
+            "name": f"Mathematical Checksum Failure ({checksum_check_name})",
+            "description": checksum_failure_desc
+        })
+        other_failures = max(0, failures - 1)
+        if other_failures > 0:
+            pts_oth = min(20, other_failures * 10)
+            raw_score += pts_oth
+            factors.append({
+                "category": "VALIDATION_FAILURE",
+                "points": pts_oth,
+                "severity": "HIGH",
+                "name": f"{other_failures} Additional Document Rule Failure(s)",
+                "description": "Syntax or mandatory field validation discrepancies."
+            })
     elif failures > 0 and not mock_hit:
         pts = min(40, failures * 25)
         raw_score += pts
@@ -93,7 +135,29 @@ def compute_risk_assessment(
             "description": "Mathematical checksum mismatch (ICAO/Verhoeff) or malformed document syntax."
         })
 
-    if warnings > 0:
+    # Process warnings (including OCR uncertainty)
+    if has_checksum_warning:
+        pts_warn = 8
+        raw_score += pts_warn
+        factors.append({
+            "category": "OCR_CHECKSUM_UNCERTAINTY",
+            "points": pts_warn,
+            "severity": "WARN",
+            "name": "Aadhaar Checksum Optical Ambiguity (OCR Uncertainty)",
+            "description": checksum_warning_desc
+        })
+        other_warnings = max(0, warnings - 1)
+        if other_warnings > 0:
+            pts_other_w = min(12, other_warnings * 5)
+            raw_score += pts_other_w
+            factors.append({
+                "category": "VALIDATION_WARNING",
+                "points": pts_other_w,
+                "severity": "WARN",
+                "name": f"{other_warnings} Regulatory Warning(s)",
+                "description": "Notice regarding validity duration, repeated submission, or minor formatting."
+            })
+    elif warnings > 0:
         pts = min(15, warnings * 6)
         raw_score += pts
         factors.append({
@@ -229,17 +293,29 @@ def compute_risk_assessment(
     if is_mismatch or is_non_identity:
         pts = 90
         raw_score += pts
-        factors.append({
-            "category": "DOCUMENT_TYPE_FRAUD",
-            "points": pts,
-            "severity": "CRITICAL",
-            "name": f"Document Impersonation: {claimed_type} vs {doc_type.replace('_', ' ').title()}",
-            "description": (
-                f"Severe fraud & identity deception attempt: Intake registered as official '{claimed_type}', "
-                f"but multi-modal analysis confirmed a non-identity commercial document ({doc_type.replace('_', ' ').title()}) "
-                f"lacking all statutory government credentials, seals, and checksums."
-            )
-        })
+        if is_non_identity:
+            factors.append({
+                "category": "DOCUMENT_TYPE_FRAUD",
+                "points": pts,
+                "severity": "CRITICAL",
+                "name": f"Document Impersonation: {claimed_type} vs {doc_type.replace('_', ' ').title()}",
+                "description": (
+                    f"Severe fraud & identity deception attempt: Intake registered as official '{claimed_type}', "
+                    f"but multi-modal analysis confirmed a non-identity commercial document ({doc_type.replace('_', ' ').title()}) "
+                    f"lacking all statutory government credentials, seals, and checksums."
+                )
+            })
+        else:
+            factors.append({
+                "category": "DOCUMENT_TYPE_MISMATCH",
+                "points": pts,
+                "severity": "CRITICAL",
+                "name": f"Document Type Conflict: Claimed {claimed_type} vs Detected {doc_type.replace('_', ' ').title()}",
+                "description": (
+                    f"Document intake mismatch: Intake registered as official '{claimed_type}', "
+                    f"but automated optical and format classification identified document characteristics matching '{doc_type.replace('_', ' ').title()}'."
+                )
+            })
         if not doc_id:
             pts_id = 25
             raw_score += pts_id
@@ -283,7 +359,7 @@ def compute_risk_assessment(
         })
 
     # =========================================================================
-    # 7. CRYPTOGRAPHIC QR CODE VS PRINTED IDENTITY CROSS-VERIFICATION
+    # 7. QR CODE VS PRINTED IDENTITY CROSS-VERIFICATION
     # =========================================================================
     if cross_report and cross_report.get("qr_decoded"):
         if cross_report.get("has_critical_mismatch"):
@@ -294,26 +370,31 @@ def compute_risk_assessment(
                 for m in cross_report.get("verification_matrix", [])
                 if m.get("status") == "MISMATCH"
             ]
-            desc = "; ".join(mismatch_items) if mismatch_items else "Printed document surface contradicts cryptographic QR record."
+            desc = "; ".join(mismatch_items) if mismatch_items else "Printed document surface contradicts decoded QR record."
             factors.append({
-                "category": "CRYPTOGRAPHIC_QR_CONFLICT",
+                "category": "QR_CROSS_CHECK_CONFLICT",
                 "points": pts,
                 "severity": "CRITICAL",
-                "name": "Cryptographic Identity Tampering Alert",
+                "name": "QR ↔ OCR Identity Mismatch Alert",
                 "description": desc
             })
         elif cross_report.get("overall_match_score", 0) >= 80.0:
-            # Verified cryptographic integrity
+            # Verified cross-consistency
             factors.append({
-                "category": "CRYPTOGRAPHIC_QR_VERIFIED",
+                "category": "QR_CROSS_CHECK_VERIFIED",
                 "points": 0,
                 "severity": "PASS",
-                "name": "Cryptographic QR Identity Verified",
-                "description": "Printed document identity data matches cryptographic QR record."
+                "name": "QR Cross-Verification Confirmed",
+                "description": "Printed document identity data matches decoded QR payload."
             })
 
     # Normalized risk score 0 - 100
     final_score = int(min(100, max(0, raw_score)))
+
+    # If confirmed mathematical checksum failure occurred:
+    # It must NEVER be cleared as VERIFIED / LOW RISK (score <= 29)
+    if has_checksum_failure and not (is_mismatch or is_non_identity):
+        final_score = max(final_score, 40)
 
     # Risk level classification
     is_unrecognized = (doc_type == "UNKNOWN")
@@ -321,11 +402,18 @@ def compute_risk_assessment(
         final_score = max(final_score, 95)  # Guaranteed 95 - 100 critical score for fraud / non-identity
         risk_level = "CRITICAL"
         verdict = VERDICT_HIGH_RISK
-        officer_rec = (
-            f"CRITICAL SECURITY REJECTION: Immediate denial of entry/intake. Traveler submitted a non-identity commercial "
-            f"document ({doc_type.replace('_', ' ').title()}) represented as an official {claimed_type}. "
-            "Potential deliberate fraud or document deception. Escalate to supervisory border authority."
-        )
+        if is_non_identity:
+            officer_rec = (
+                f"CRITICAL SECURITY REJECTION: Immediate denial of entry/intake. Traveler submitted a non-identity commercial "
+                f"document ({doc_type.replace('_', ' ').title()}) represented as an official {claimed_type}. "
+                "Potential deliberate fraud or document deception. Escalate to supervisory border authority."
+            )
+        else:
+            officer_rec = (
+                f"CRITICAL DOCUMENT MISMATCH: Immediate intake rejection. Submitted document identified as "
+                f"'{doc_type.replace('_', ' ').title()}', conflicting with declared '{claimed_type}'. "
+                "Verify traveler identity credentials manually."
+            )
     elif is_unrecognized:
         risk_level = "HIGH" if final_score >= 60 else "MEDIUM"
         verdict = VERDICT_HIGH_RISK if final_score >= 60 else "NEEDS MANUAL REVIEW"
@@ -333,11 +421,17 @@ def compute_risk_assessment(
     elif final_score <= RISK_THRESHOLD_LOW:
         risk_level = "LOW"
         verdict = VERDICT_VERIFIED
-        officer_rec = "Clear for transit. Document verified authentic across optical, mathematical, and forensic layers."
+        if has_checksum_warning:
+            officer_rec = "Clear for transit. Document verified with minor optical scan ambiguity in checksum sequence. Secondary visual check recommended if uncertainty persists."
+        else:
+            officer_rec = "Clear for transit. Document verified authentic across optical, mathematical, and forensic layers."
     elif final_score <= RISK_THRESHOLD_MED:
         risk_level = "MEDIUM"
         verdict = VERDICT_REVIEW
-        officer_rec = "Secondary manual inspection recommended. Document exhibits minor inconsistencies or warnings."
+        if has_checksum_failure:
+            officer_rec = "Secondary physical inspection required. Document flagged with mathematical checksum failure (Verhoeff/ICAO). Verify physical document credentials."
+        else:
+            officer_rec = "Secondary manual inspection recommended. Document exhibits minor inconsistencies or warnings."
     elif final_score <= RISK_THRESHOLD_HIGH:
         risk_level = "HIGH"
         verdict = VERDICT_HIGH_RISK
