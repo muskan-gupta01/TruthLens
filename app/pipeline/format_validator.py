@@ -239,7 +239,11 @@ def validate_pan_number(pan_str: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def validate_aadhaar_number(aadhaar_str: Optional[str]) -> Dict[str, Any]:
+def validate_aadhaar_number(
+    aadhaar_str: Optional[str],
+    ocr_confidence: Optional[float] = None,
+    is_uncertain: bool = False
+) -> Dict[str, Any]:
     """
     Validates Aadhaar number with UIDAI Verhoeff mathematical checksum (12 digits)
     or statutory Masked Aadhaar format (XXXX XXXX 1234) under UIDAI / DPDP guidelines.
@@ -289,6 +293,15 @@ def validate_aadhaar_number(aadhaar_str: Optional[str]) -> Dict[str, Any]:
 
     is_valid = validate_verhoeff(clean_digits)
     if not is_valid:
+        uncertain = is_uncertain or (ocr_confidence is not None and ocr_confidence < 75.0)
+        if uncertain:
+            conf_str = f" (OCR confidence: {ocr_confidence}%)" if ocr_confidence is not None else ""
+            return {
+                "valid": False,
+                "status": "WARN",
+                "label": "⚠ Review Required",
+                "message": f"Mathematical Checksum Uncertainty: Aadhaar number '{clean_digits}' failed Verhoeff verification due to possible OCR ambiguity{conf_str}. Manual review required."
+            }
         return {
             "valid": False,
             "status": "FAIL",
@@ -429,7 +442,14 @@ def validate_document_rules(
             total_warnings += 1
 
     elif doc_type == DOC_TYPE_AADHAAR:
-        res_num = validate_aadhaar_number(doc_num)
+        ocr_conf = ocr_data.get("mean_confidence") or ocr_data.get("ocr_confidence") or ocr_data.get("confidence")
+        is_unc = (
+            ocr_data.get("is_uncertain", False) or
+            ocr_data.get("ocr_uncertain", False) or
+            fields.get("is_uncertain", False) or
+            fields.get("ocr_uncertain", False)
+        )
+        res_num = validate_aadhaar_number(doc_num, ocr_confidence=ocr_conf, is_uncertain=is_unc)
         checklist.append({
             "check": "Aadhaar Verhoeff Checksum",
             "status": res_num["status"],

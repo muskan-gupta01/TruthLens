@@ -55,6 +55,19 @@
     if (forgotPasswordMessage) {
       forgotPasswordMessage.className = "message";
       forgotPasswordMessage.textContent = "";
+  }
+    const loginPasswordInput = document.getElementById("loginPassword");
+    const toggleLoginPassword = document.getElementById("toggleLoginPassword");
+    if (loginPasswordInput && toggleLoginPassword) {
+      loginPasswordInput.setAttribute("type", "password");
+      const eyeShow = toggleLoginPassword.querySelector(".eye-show");
+      const eyeHide = toggleLoginPassword.querySelector(".eye-hide");
+      if (eyeShow && eyeHide) {
+        eyeShow.style.display = "block";
+        eyeHide.style.display = "none";
+      }
+      toggleLoginPassword.setAttribute("aria-label", "Show password");
+      toggleLoginPassword.setAttribute("title", "Show password");
     }
   }
 
@@ -287,6 +300,35 @@
     if (!loginMessage) return;
     loginMessage.textContent = text;
     loginMessage.className = "message " + type;
+  }
+
+  // Password Visibility Toggle
+  const toggleLoginPassword = document.getElementById("toggleLoginPassword");
+  const loginPasswordInput = document.getElementById("loginPassword");
+  if (toggleLoginPassword && loginPasswordInput) {
+    toggleLoginPassword.addEventListener("click", function () {
+      const isPassword = loginPasswordInput.getAttribute("type") === "password";
+      loginPasswordInput.setAttribute("type", isPassword ? "text" : "password");
+
+      const eyeShow = toggleLoginPassword.querySelector(".eye-show");
+      const eyeHide = toggleLoginPassword.querySelector(".eye-hide");
+      if (eyeShow && eyeHide) {
+        eyeShow.style.display = isPassword ? "none" : "block";
+        eyeHide.style.display = isPassword ? "block" : "none";
+      }
+      const label = isPassword ? "Hide password" : "Show password";
+      toggleLoginPassword.setAttribute("aria-label", label);
+      toggleLoginPassword.setAttribute("title", label);
+    });
+  }
+
+  // Forgot Password Link Action
+  const forgotPasswordLink = document.getElementById("forgotPasswordLink");
+  if (forgotPasswordLink) {
+    forgotPasswordLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      showLoginMessage("Please contact your system administrator to reset your password.", "info");
+    });
   }
 
   // =========================================================================

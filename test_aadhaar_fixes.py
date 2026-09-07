@@ -8,6 +8,13 @@ Validates:
 5. End-to-end mock screening of real modern Aadhaar profile (LOW RISK / VERIFIED)
 """
 import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+from unittest.mock import patch
 from PIL import Image
 from app.pipeline.cross_verifier import compare_id_numbers, compare_names, cross_verify_documents
 from app.pipeline.format_validator import validate_aadhaar_number, validate_verhoeff
@@ -22,7 +29,7 @@ def run_aadhaar_tests():
     print("=" * 75)
 
     passed = 0
-    total = 5
+    total = 9
 
     # =========================================================================
     # TEST 1: BIDIRECTIONAL UIDAI SECURE QR V2 NUMBER MATCHING
@@ -100,7 +107,70 @@ def run_aadhaar_tests():
     fields_split = parse_aadhaar_fields(sample_text_split)
     assert fields_split["name"] == "Priya Kumari", f"Expected 'Priya Kumari', got '{fields_split['name']}'"
 
-    print("  >>> PASS: 'Unique Identification' and administrative headers are strictly excluded!")
+    # Subtest 3.1: Reject OCR noise garbage (Sew STR NK Or Ww few om eer) when no valid name exists
+    sample_noise_only = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    DOB: 12/05/1992
+    MALE
+    5489 2104 7834
+    """
+    fields_noise = parse_aadhaar_fields(sample_noise_only)
+    assert fields_noise["name"] is None, f"Expected None for OCR garbage, got '{fields_noise['name']}'"
+
+    # Subtest 3.2: Highest priority to text immediately following 'Name:' even with noise present
+    sample_with_label_and_noise = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    Name: Aakash Verma
+    DOB: 12/05/1992
+    MALE
+    5489 2104 7834
+    """
+    fields_lbl = parse_aadhaar_fields(sample_with_label_and_noise)
+    assert fields_lbl["name"] == "Aakash Verma", f"Expected 'Aakash Verma', got '{fields_lbl['name']}'"
+
+    # Subtest 3.3: Hindi label 'नाम:' priority
+    sample_hindi_label = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    नाम: रोहित शर्मा
+    Rohit Sharma
+    DOB: 15/08/1995
+    MALE
+    5489 2104 7834
+    """
+    fields_hindi = parse_aadhaar_fields(sample_hindi_label)
+    assert fields_hindi["name"] == "Rohit Sharma", f"Expected 'Rohit Sharma', got '{fields_hindi['name']}'"
+
+    # Subtest 3.4: Bilingual label 'नाम / Name:' priority
+    sample_bilingual = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    नाम / Name: Suresh Kumar
+    DOB: 20/11/1988
+    MALE
+    5489 2104 7834
+    """
+    fields_bi = parse_aadhaar_fields(sample_bilingual)
+    assert fields_bi["name"] == "Suresh Kumar", f"Expected 'Suresh Kumar', got '{fields_bi['name']}'"
+
+    # Subtest 3.5: Reject address, website, and symbol noise
+    sample_address_noise = """
+    Address: S/O Ramesh Kumar, House 42, MG Road, Indiranagar, Bangalore 560038
+    www.uidai.gov.in
+    1947
+    help@uidai.gov.in
+    ~*^$ Sew STR NK Or Ww few om eer
+    """
+    fields_addr = parse_aadhaar_fields(sample_address_noise)
+    assert fields_addr["name"] is None, f"Expected None for address/website text, got '{fields_addr['name']}'"
+
+    print("  >>> PASS: 'Unique Identification' excluded, OCR noise strictly rejected, label priority verified!")
     passed += 1
 
     # =========================================================================
@@ -142,6 +212,97 @@ def run_aadhaar_tests():
     assert t_score >= 60, f"Tampered Aadhaar score too low: {t_score}"
 
     print("  >>> PASS: Tampered Aadhaar with altered name remains strictly flagged as HIGH RISK!")
+    passed += 1
+
+    # =========================================================================
+    # TEST 6: TARGETED TEST 1 - VALID VERHOEFF CHECKSUM -> AUTHENTIC / LOW-RISK
+    # =========================================================================
+    print("\n[TEST 6] TARGETED TEST 1: Valid Verhoeff Checksum -> Authentic / Low-Risk Path Retained...")
+    # Genuine card with valid Verhoeff checksum
+    res_gen = run_truthlens_screening(doc_img)
+    chk_gen = next(c for c in res_gen["dossier"]["checkpoints"] if c["id"] == "checksum")
+    assert chk_gen["status"] == "PASS", f"Expected PASS for valid Verhoeff, got {chk_gen['status']}"
+    assert res_gen["verdict"] == "VERIFIED / LOW RISK", f"Expected VERIFIED / LOW RISK, got {res_gen['verdict']}"
+    assert res_gen["dossier"]["simple_badge"] == "VERIFIED AUTHENTIC", f"Expected VERIFIED AUTHENTIC, got {res_gen['dossier']['simple_badge']}"
+    assert res_gen["dossier"]["validity_status"] == "ACTIVE / VALID", f"Expected ACTIVE / VALID, got {res_gen['dossier']['validity_status']}"
+    assert res_gen["risk_score"] <= 29, f"Risk score exceeded low risk threshold: {res_gen['risk_score']}"
+
+    print("  >>> PASS: Valid Verhoeff checksum produces VERIFIED AUTHENTIC & ACTIVE / VALID with LOW RISK!")
+    passed += 1
+
+    # =========================================================================
+    # TEST 7: TARGETED TEST 2 - CONFIRMED INVALID VERHOEFF CHECKSUM -> CANNOT BE VERIFIED AUTHENTIC
+    # =========================================================================
+    print("\n[TEST 7] TARGETED TEST 2: Confirmed Invalid Verhoeff Checksum -> Cannot Be VERIFIED AUTHENTIC...")
+    # Isolate checksum failure by disabling QR decoding override and injecting confirmed invalid check digit
+    with patch("app.pipeline.screening_pipeline.detect_and_decode_qr", return_value={"detected": False, "decoded": False}):
+        res_bad = run_truthlens_screening(doc_img, doc_number_override="5489 2104 7830")
+    chk_bad = next(c for c in res_bad["dossier"]["checkpoints"] if c["id"] == "checksum")
+    assert chk_bad["status"] == "FAIL", f"Expected Mathematical Checksum: FAIL, got {chk_bad['status']}"
+
+    # Critical requirement: Confirmed invalid checksum MUST NOT produce "VERIFIED AUTHENTIC"
+    badge = res_bad["dossier"]["simple_badge"]
+    verdict = res_bad["verdict"]
+    print(f"  Result: Badge = '{badge}' | Verdict = '{verdict}' | Risk Score = {res_bad['risk_score']}/100")
+    assert badge != "VERIFIED AUTHENTIC", f"VIOLATION: Confirmed invalid checksum produced '{badge}'!"
+    assert verdict != "VERIFIED / LOW RISK", f"VIOLATION: Confirmed invalid checksum produced '{verdict}'!"
+    assert verdict in ["NEEDS MANUAL REVIEW", "HIGH RISK / SUSPICIOUS DOCUMENT"], f"Unexpected verdict: {verdict}"
+    assert badge in ["REVIEW REQUIRED", "REJECTED / SUSPICIOUS"], f"Unexpected badge: {badge}"
+
+    print("  >>> PASS: Confirmed invalid Verhoeff checksum CANNOT produce VERIFIED AUTHENTIC (routed to Review/High Risk)!")
+    passed += 1
+
+    # =========================================================================
+    # TEST 8: TARGETED TEST 3 - CONFIRMED INVALID CHECKSUM -> CANNOT SHOW ACTIVE / VALID
+    # =========================================================================
+    print("\n[TEST 8] TARGETED TEST 3: Confirmed Invalid Checksum -> Cannot Show ACTIVE / VALID...")
+    val_status = res_bad["dossier"]["validity_status"]
+    val_class = res_bad["dossier"]["validity_badge_class"]
+    print(f"  Result: Validity Status = '{val_status}' | Badge Class = '{val_class}'")
+    assert val_status != "ACTIVE / VALID", f"VIOLATION: Invalid checksum displayed as '{val_status}'!"
+    assert val_status in ["INVALID CHECKSUM", "INVALID"], f"Expected non-valid status, got '{val_status}'"
+    assert val_class == "badge-red", f"Expected badge-red, got '{val_class}'"
+
+    print("  >>> PASS: Confirmed invalid checksum CANNOT show ACTIVE / VALID (correctly displays INVALID CHECKSUM)!")
+    passed += 1
+
+    # =========================================================================
+    # TEST 9: TARGETED TEST 4 - OCR-UNCERTAIN CHECKSUM -> REVIEW REQUIRED RATHER THAN AUTHENTIC
+    # =========================================================================
+    print("\n[TEST 9] TARGETED TEST 4: OCR-Uncertain Checksum -> REVIEW REQUIRED Rather Than Authentic...")
+    # 1. Format validator level
+    val_unc = validate_aadhaar_number("5489 2104 7830", ocr_confidence=60.0)
+    assert val_unc["status"] == "WARN", f"Expected WARN for uncertain OCR checksum, got {val_unc['status']}"
+    assert "Uncertainty" in val_unc["message"], f"Expected uncertainty explanation, got {val_unc['message']}"
+
+    # 2. End-to-end pipeline screening level with uncertain OCR capture
+    with patch("app.pipeline.screening_pipeline.detect_and_decode_qr", return_value={"detected": False, "decoded": False}), \
+         patch("app.pipeline.screening_pipeline.extract_document_fields") as mock_ocr:
+        mock_ocr.return_value = {
+            "doc_type": "AADHAAR",
+            "fields": {"id_number": "5489 2104 7830", "name": "Aakash Verma"},
+            "mean_confidence": 60.0,
+            "ocr_confidence": 60.0,
+            "confidence": 60.0,
+            "raw_text": "5489 2104 7830\nAakash Verma",
+            "mrz": None
+        }
+        res_unc = run_truthlens_screening(doc_img)
+
+    chk_unc = next(c for c in res_unc["dossier"]["checkpoints"] if c["id"] == "checksum")
+    assert chk_unc["status"] == "WARN", f"Expected checksum status WARN, got {chk_unc['status']}"
+
+    badge_unc = res_unc["dossier"]["simple_badge"]
+    verdict_unc = res_unc["verdict"]
+    val_unc_status = res_unc["dossier"]["validity_status"]
+    print(f"  Result: Badge = '{badge_unc}' | Verdict = '{verdict_unc}' | Validity = '{val_unc_status}'")
+
+    assert badge_unc == "REVIEW REQUIRED", f"Expected REVIEW REQUIRED for uncertain checksum, got '{badge_unc}'"
+    assert verdict_unc == "NEEDS MANUAL REVIEW", f"Expected NEEDS MANUAL REVIEW, got '{verdict_unc}'"
+    assert badge_unc != "VERIFIED AUTHENTIC", "Uncertain checksum must NOT be declared authentic!"
+    assert val_unc_status != "ACTIVE / VALID", "Uncertain checksum must NOT show ACTIVE / VALID!"
+
+    print("  >>> PASS: OCR-uncertain checksum correctly routed to REVIEW REQUIRED rather than authentic!")
     passed += 1
 
     print("\n" + "=" * 75)
