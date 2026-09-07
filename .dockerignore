@@ -1,0 +1,28 @@
+# Python bytecode & test cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Version control
+.git/
+.gitignore
+
+# Local dev database (ensures fresh DB is created on deploy)
+database/truthlens.db
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Temp upload files
+temp/*
+!temp/.gitkeep
+
+# IDE & system metadata
+.idea/
+.vscode/
+
+# Non-runtime presentation binary
+TruthLens_SIH_Presentation.pptx
