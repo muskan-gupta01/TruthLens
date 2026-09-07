@@ -633,9 +633,73 @@ input::placeholder {
   color: var(--text-muted);
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrapper input {
+  padding-right: 42px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  line-height: 1;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.password-toggle-btn:hover {
+  color: var(--teal-neon);
+  background: rgba(0, 173, 181, 0.1);
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--teal-primary);
+  outline-offset: 1px;
+}
+
+.password-toggle-btn svg {
+  display: block;
+}
+
+.form-sub-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+
+.forgot-password-link {
+  font-size: 12.5px;
+  color: var(--teal-neon);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.forgot-password-link:hover {
+  color: #5effe6;
+  text-decoration: underline;
+  text-shadow: 0 0 8px rgba(0, 245, 212, 0.4);
+}
+
 .form-submit {
   width: 100%;
-  margin-top: 24px;
+  margin-top: 20px;
   padding: 13px;
   font-size: 15px;
   font-weight: 700;
@@ -686,6 +750,13 @@ input::placeholder {
   color: #FECACA;
   background: rgba(239, 68, 68, 0.18);
   border: 1px solid rgba(239, 68, 68, 0.45);
+}
+
+.message.info {
+  display: block;
+  color: #BAE6FD;
+  background: rgba(14, 165, 233, 0.18);
+  border: 1px solid rgba(14, 165, 233, 0.45);
 }
 
 /* Demo Credentials Helper Box */
