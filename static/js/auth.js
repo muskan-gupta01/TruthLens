@@ -201,13 +201,23 @@
         const res = await fetch("/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
           body: JSON.stringify({ email, password })
         });
 
-        const data = await res.json();
+        const responseText = await res.text();
+        let data = {};
+        try {
+          data = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+          data = { message: "The server returned an invalid response." };
+        }
 
         if (!res.ok || !data.success) {
-          showLoginMessage(data.detail || data.message || "Invalid credentials. Please try again.", "error");
+          const detail = Array.isArray(data.detail)
+            ? data.detail.map((item) => item.msg || "Invalid value").join(" ")
+            : data.detail;
+          showLoginMessage(detail || data.message || "Invalid credentials. Please try again.", "error");
           if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.textContent = originalText;
@@ -224,7 +234,7 @@
         showLoginMessage("Login verified! Redirecting to Dashboard...", "success");
 
         setTimeout(() => {
-          window.location.href = getRedirectTarget();
+          window.location.href = data.redirect_url || getRedirectTarget();
         }, 600);
 
       } catch (err) {
