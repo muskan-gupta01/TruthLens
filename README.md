@@ -169,7 +169,7 @@ python run.py
 ### 4. Access the Dashboard
 - **Web Dashboard:** [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard)
 - **Interactive Swagger API Docs:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **HTML Slide Presentation:** [http://127.0.0.1:8000/presentation.html](http://127.0.0.1:8000/presentation.html)
+- **HTML Slide Presentation:** [http://127.0.0.1:8000/presentation](http://127.0.0.1:8000/presentation)
 
 ---
 
