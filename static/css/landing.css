@@ -641,30 +641,38 @@ input::placeholder {
 }
 
 .password-input-wrapper input {
-  padding-right: 42px;
+  width: 100%;
+  padding-right: 44px;
 }
 
 .password-toggle-btn {
   position: absolute;
-  right: 8px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  background: transparent;
-  border: none;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  outline: none;
+  box-shadow: none !important;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 6px;
+  padding: 4px;
+  margin: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 4px;
   line-height: 1;
-  transition: color 0.2s ease, background 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: color 0.2s ease;
+  z-index: 2;
 }
 
 .password-toggle-btn:hover {
   color: var(--teal-neon);
-  background: rgba(0, 173, 181, 0.1);
+  background: transparent !important;
 }
 
 .password-toggle-btn:focus-visible {
@@ -674,6 +682,10 @@ input::placeholder {
 
 .password-toggle-btn svg {
   display: block;
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  pointer-events: none;
 }
 
 .form-sub-row {
@@ -684,11 +696,12 @@ input::placeholder {
 }
 
 .forgot-password-link {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--teal-neon);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
   transition: all 0.2s ease;
+  display: inline-block;
 }
 
 .forgot-password-link:hover {

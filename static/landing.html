@@ -8,8 +8,77 @@
   <!-- Modern Google Fonts matching Dashboard Website -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/landing.css?v=3.0">
+  <link rel="stylesheet" href="/static/css/landing.css?v=3.1">
+  <style>
+    .password-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    .password-input-wrapper input {
+      width: 100%;
+      padding-right: 44px;
+    }
+    .password-toggle-btn {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent !important;
+      background-color: transparent !important;
+      border: none !important;
+      outline: none;
+      box-shadow: none !important;
+      color: var(--text-muted, #64748B);
+      cursor: pointer;
+      padding: 4px;
+      margin: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      line-height: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      transition: color 0.2s ease;
+      z-index: 2;
+    }
+    .password-toggle-btn:hover {
+      color: var(--teal-neon, #00F5D4);
+      background: transparent !important;
+    }
+    .password-toggle-btn:focus-visible {
+      outline: 2px solid var(--teal-primary, #00ADB5);
+      outline-offset: 1px;
+    }
+    .password-toggle-btn svg {
+      display: block;
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      pointer-events: none;
+    }
+    .form-sub-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+      margin-bottom: 2px;
+    }
+    .forgot-password-link {
+      font-size: 13px;
+      color: var(--teal-neon, #00F5D4);
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      display: inline-block;
+    }
+    .forgot-password-link:hover {
+      color: #5effe6;
+      text-decoration: underline;
+      text-shadow: 0 0 8px rgba(0, 245, 212, 0.4);
+    }
+  </style>
 </head>
 
 <body>
