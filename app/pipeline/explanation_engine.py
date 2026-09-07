@@ -79,7 +79,12 @@ def _generate_local_explanation(
     doc_name = doc_type.replace("_", " ").title() if doc_type else "Document"
 
     # 1. Genuine / Verified Document (Low Risk)
-    if risk_level == "LOW" or risk_score <= 29:
+    has_checksum_problem = any(
+        (c.get("id") == "checksum" or "checksum" in str(c.get("title", "")).lower() or "verhoeff" in str(c.get("title", "")).lower()) and
+        c.get("status") in ["FAIL", "WARN"]
+        for c in (checkpoints or [])
+    )
+    if (risk_level == "LOW" or risk_score <= 29) and not has_checksum_problem:
         return (
             f"DOCUMENT VERIFIED AUTHENTIC: This {doc_name} has successfully passed all optical character checks, mathematical check "
             f"digits, and digital forensic integrity scans with a clean risk score of {risk_score}/100. No watchlist records or "
@@ -158,12 +163,25 @@ def _generate_local_explanation(
         )
 
     # 6. Checksum / MRZ Cryptographic Failure
-    mrz_check = next((c for c in (checkpoints or []) if "MRZ" in c.get("name", "")), None)
-    if mrz_check and mrz_check.get("status") == "FAIL":
+    chk_check = next((c for c in (checkpoints or []) if c.get("id") == "checksum" or "MRZ" in c.get("name", "") or "checksum" in str(c.get("title", "")).lower()), None)
+    if chk_check and chk_check.get("status") == "FAIL":
+        if "MRZ" in str(chk_check.get("name", "")) or "ICAO" in str(chk_check.get("detail", "")):
+            return (
+                f"CRYPTOGRAPHIC CHECKSUM MISMATCH: The machine-readable zone (MRZ) check digits failed mathematical verification "
+                f"under ICAO Doc 9303 standards. The credential has been modified or counterfeit-printed. "
+                f"Officer action: Refuse transit and initiate forensic document inspection."
+            )
+        else:
+            return (
+                f"MATHEMATICAL CHECKSUM FAILURE: This {doc_name} failed official check digit verification (Verhoeff algorithm). "
+                f"The document identifier is mathematically invalid and indicative of a fabricated or counterfeit credential. "
+                f"Officer action: Refuse transit and refer for forensic identity inspection."
+            )
+    elif chk_check and chk_check.get("status") == "WARN":
         return (
-            f"CRYPTOGRAPHIC CHECKSUM MISMATCH: The machine-readable zone (MRZ) check digits failed mathematical verification "
-            f"under ICAO Doc 9303 standards. The credential has been modified or counterfeit-printed. "
-            f"Officer action: Refuse transit and initiate forensic document inspection."
+            f"CHECKSUM VERIFICATION UNCERTAINTY: The {doc_name} check digit could not be conclusively verified due to optical "
+            f"character ambiguity. "
+            f"Officer action: Conduct manual physical inspection of document number."
         )
 
     # 7. Generic / Medium Risk Warning

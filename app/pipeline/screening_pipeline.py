@@ -223,21 +223,7 @@ def run_truthlens_screening(
     is_mismatch = ocr_result.get("is_claimed_mismatch", False)
     is_non_identity = ocr_result.get("is_non_identity", False) or (doc_type in [DOC_TYPE_BUSINESS_CARD, DOC_TYPE_NON_IDENTITY])
 
-    if is_mismatch or is_non_identity:
-        summary = f"CRITICAL FRAUD REJECTION: Presented as '{claimed_type}' but confirmed as a non-identity commercial document ({doc_type.replace('_', ' ').title()}). Lacks all statutory government credentials (Risk Score: {risk_score}/100)."
-    elif doc_type == DOC_TYPE_UNKNOWN or (not name_val and not num_val):
-        summary = f"INCOMPLETE SCREENING: Document could not be recognized as a valid institutional identity format (Risk Score: {risk_score}/100)."
-    elif risk_level == "LOW":
-        summary = f"Document verified authentic across optical, mathematical, and forensic checks (Risk Score: {risk_score}/100)."
-    elif risk_level == "MEDIUM":
-        summary = f"Review recommended: Document flagged with {len(risk_report['factors'])} minor warning(s) (Risk Score: {risk_score}/100)."
-    else:
-        summary = f"HIGH RISK ALERT: Rejected due to {len(risk_report['factors'])} security violation(s) (Risk Score: {risk_score}/100)."
-
     # Build 5 key security checkpoints for instant visual display
-    is_genuine = (risk_level == "LOW")
-    is_critical = (risk_level in ["CRITICAL", "HIGH"])
-
     # 1. Format & Expiry
     if is_mismatch or is_non_identity:
         format_status = "FAIL"
@@ -280,15 +266,23 @@ def run_truthlens_screening(
         if v_check and v_check.get("status") == "PASS":
             checksum_status = "PASS"
             checksum_detail = v_check.get("detail", "UIDAI Verhoeff: Dihedral D5 checksum algorithm valid.")
+        elif v_check and v_check.get("status") == "WARN":
+            checksum_status = "WARN"
+            checksum_detail = v_check.get("detail", "Checksum verification inconclusive due to OCR uncertainty.")
         elif v_check:
             checksum_status = v_check.get("status", "FAIL")
             checksum_detail = v_check.get("detail", "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number.")
         else:
             # Fallback to direct validation
-            v_res = validate_aadhaar_number(num_val)
-            if num_val and v_res.get("valid"):
+            ocr_conf = ocr_result.get("mean_confidence") or ocr_result.get("ocr_confidence")
+            is_unc = ocr_result.get("is_uncertain", False) or ocr_result.get("ocr_uncertain", False)
+            v_res = validate_aadhaar_number(num_val, ocr_confidence=ocr_conf, is_uncertain=is_unc)
+            if num_val and v_res.get("valid") and v_res.get("status") == "PASS":
                 checksum_status = "PASS"
                 checksum_detail = v_res.get("message", f"UIDAI Verhoeff: Checksum algorithm valid for {num_val}.")
+            elif v_res.get("status") == "WARN":
+                checksum_status = "WARN"
+                checksum_detail = v_res.get("message", "Checksum verification inconclusive due to OCR uncertainty.")
             else:
                 checksum_status = "FAIL"
                 checksum_detail = v_res.get("message", "Verhoeff Algorithm Checksum Failed: Invalid Aadhaar number.")
@@ -339,29 +333,73 @@ def run_truthlens_screening(
         watchlist_status = "PASS"
         watchlist_detail = "Clear: Zero records found in simulated Interpol/Border watchlists."
 
+    # Genuine status requires low risk, verified checksum, and non-expired status
+    is_genuine = (risk_level == "LOW") and (checksum_status == "PASS") and not validation_result.get("expired", False)
+    is_critical = (risk_level in ["CRITICAL", "HIGH"])
+
+    # High-level summary statement
+    if is_mismatch or is_non_identity:
+        summary = f"CRITICAL FRAUD REJECTION: Presented as '{claimed_type}' but confirmed as a non-identity commercial document ({doc_type.replace('_', ' ').title()}). Lacks all statutory government credentials (Risk Score: {risk_score}/100)."
+    elif doc_type == DOC_TYPE_UNKNOWN or (not name_val and not num_val):
+        summary = f"INCOMPLETE SCREENING: Document could not be recognized as a valid institutional identity format (Risk Score: {risk_score}/100)."
+    elif checksum_status == "FAIL":
+        summary = f"Mathematical Checksum Failure: Aadhaar number failed Verhoeff algorithm verification (Risk Score: {risk_score}/100)."
+    elif checksum_status == "WARN":
+        summary = f"Review recommended: Checksum verification inconclusive due to OCR uncertainty (Risk Score: {risk_score}/100)."
+    elif is_genuine:
+        summary = f"Document verified authentic across optical, mathematical, and forensic checks (Risk Score: {risk_score}/100)."
+    elif risk_level == "MEDIUM":
+        summary = f"Review recommended: Document flagged with {len(risk_report['factors'])} minor warning(s) (Risk Score: {risk_score}/100)."
+    else:
+        summary = f"HIGH RISK ALERT: Rejected due to {len(risk_report['factors'])} security violation(s) (Risk Score: {risk_score}/100)."
+
     # Simple verdict badge and headline
     if is_mismatch or is_non_identity:
         simple_badge = "REJECTED / FAKE DETECTED"
         simple_color = "red"
         simple_headline = f"Claimed {claimed_type} Mismatch • Non-Identity Document"
-    elif is_genuine:
-        simple_badge = "VERIFIED AUTHENTIC"
-        simple_color = "green"
-        simple_headline = "Document Authentic • Passenger Cleared"
     elif is_critical:
         simple_badge = "REJECTED / SUSPICIOUS"
         simple_color = "red"
         simple_headline = "Security Violation • Transit Denied"
+    elif is_genuine:
+        simple_badge = "VERIFIED AUTHENTIC"
+        simple_color = "green"
+        simple_headline = "Document Authentic • Passenger Cleared"
     else:
         simple_badge = "REVIEW REQUIRED"
         simple_color = "yellow"
         simple_headline = "Manual Inspection Required"
+
+    # Validity status determination
+    if validation_result.get("expired"):
+        validity_status = "EXPIRED"
+        validity_badge_class = "badge-red"
+    elif checksum_status == "FAIL":
+        validity_status = "INVALID CHECKSUM"
+        validity_badge_class = "badge-red"
+    elif checksum_status == "WARN":
+        validity_status = "REVIEW REQUIRED"
+        validity_badge_class = "badge-yellow"
+    elif doc_type in [DOC_TYPE_UNKNOWN, DOC_TYPE_NON_IDENTITY] or is_mismatch or is_non_identity:
+        validity_status = "UNRECOGNIZED" if doc_type == DOC_TYPE_UNKNOWN else "INVALID"
+        validity_badge_class = "badge-red" if (is_mismatch or is_non_identity) else "badge-yellow"
+    elif not validation_result.get("valid", True):
+        validity_status = "INVALID"
+        validity_badge_class = "badge-red"
+    else:
+        validity_status = "ACTIVE / VALID"
+        validity_badge_class = "badge-green"
+
+    validation_result["validity_status"] = validity_status
 
     dossier = {
         "is_genuine": is_genuine,
         "simple_badge": simple_badge,
         "simple_color": simple_color,
         "simple_headline": simple_headline,
+        "validity_status": validity_status,
+        "validity_badge_class": validity_badge_class,
         "subject_name": name_val or "Not Detected",
         "doc_number": num_val or "Not Detected",
         "nationality": fields.get("nationality") or fields.get("issuing_country") or "N/A",

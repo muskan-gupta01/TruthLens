@@ -65,9 +65,24 @@ def compute_risk_assessment(
     failures = validation_report.get("failures_count", 0)
     warnings = validation_report.get("warnings_count", 0)
 
+    # Check for checksum failures or warnings specifically
+    checklist = validation_report.get("checklist", [])
+    has_checksum_failure = any(
+        ("checksum" in (c.get("check") or c.get("name") or "").lower() or
+         "verhoeff" in (c.get("check") or c.get("name") or "").lower()) and
+        c.get("status") == "FAIL"
+        for c in checklist
+    )
+    has_checksum_warning = any(
+        ("checksum" in (c.get("check") or c.get("name") or "").lower() or
+         "verhoeff" in (c.get("check") or c.get("name") or "").lower()) and
+        c.get("status") == "WARN"
+        for c in checklist
+    )
+
     # Check for expired document specifically
     is_expired = False
-    for check in validation_report.get("checklist", []):
+    for check in checklist:
         if "EXPIRED" in str(check.get("detail", "")).upper():
             is_expired = True
             break
@@ -83,7 +98,7 @@ def compute_risk_assessment(
             "description": "Travel document has exceeded official expiry date. Inadmissible for border transit."
         })
     elif failures > 0 and not mock_hit:
-        pts = min(40, failures * 25)
+        pts = min(40, max(30, failures * 25))
         raw_score += pts
         factors.append({
             "category": "VALIDATION_FAILURE",
@@ -93,7 +108,17 @@ def compute_risk_assessment(
             "description": "Mathematical checksum mismatch (ICAO/Verhoeff) or malformed document syntax."
         })
 
-    if warnings > 0:
+    if has_checksum_warning and failures == 0:
+        pts = 30
+        raw_score += pts
+        factors.append({
+            "category": "CHECKSUM_UNCERTAINTY",
+            "points": pts,
+            "severity": "WARN",
+            "name": "Checksum Verification Uncertainty (OCR)",
+            "description": "Mathematical checksum could not be verified due to OCR ambiguity. Manual review required."
+        })
+    elif warnings > 0:
         pts = min(15, warnings * 6)
         raw_score += pts
         factors.append({
@@ -317,6 +342,7 @@ def compute_risk_assessment(
 
     # Risk level classification
     is_unrecognized = (doc_type == "UNKNOWN")
+    has_checksum_issue = has_checksum_failure or has_checksum_warning or (failures > 0)
     if is_mismatch or is_non_identity:
         final_score = max(final_score, 95)  # Guaranteed 95 - 100 critical score for fraud / non-identity
         risk_level = "CRITICAL"
@@ -330,11 +356,11 @@ def compute_risk_assessment(
         risk_level = "HIGH" if final_score >= 60 else "MEDIUM"
         verdict = VERDICT_HIGH_RISK if final_score >= 60 else "NEEDS MANUAL REVIEW"
         officer_rec = "UNVERIFIED INTAKE: Document type unrecognized or illegible. Mandatory identity fields missing. Officer must conduct manual physical inspection and re-scan under proper lighting."
-    elif final_score <= RISK_THRESHOLD_LOW:
+    elif final_score <= RISK_THRESHOLD_LOW and not has_checksum_issue:
         risk_level = "LOW"
         verdict = VERDICT_VERIFIED
         officer_rec = "Clear for transit. Document verified authentic across optical, mathematical, and forensic layers."
-    elif final_score <= RISK_THRESHOLD_MED:
+    elif final_score <= RISK_THRESHOLD_MED or (final_score <= RISK_THRESHOLD_LOW and has_checksum_issue):
         risk_level = "MEDIUM"
         verdict = VERDICT_REVIEW
         officer_rec = "Secondary manual inspection recommended. Document exhibits minor inconsistencies or warnings."

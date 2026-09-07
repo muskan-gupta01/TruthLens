@@ -881,13 +881,28 @@
     if (valExpiry) valExpiry.textContent = dossier.expiry_date || fields.expiry_date || 'N/A';
 
     const isExpired = data.validation?.expired;
+    const chkItem = (dossier.checkpoints || []).find(c => c.id === 'checksum');
+    const checksumStatus = chkItem ? chkItem.status : null;
+
     if (valValidity) {
-      if (isExpired) {
+      if (dossier.validity_status) {
+        valValidity.textContent = dossier.validity_status;
+        valValidity.className = dossier.validity_badge_class || (dossier.validity_status === 'ACTIVE / VALID' ? 'badge-green' : (dossier.validity_status === 'REVIEW REQUIRED' ? 'badge-yellow' : 'badge-red'));
+      } else if (isExpired) {
         valValidity.textContent = 'EXPIRED';
         valValidity.className = 'badge-red';
+      } else if (checksumStatus === 'FAIL') {
+        valValidity.textContent = 'INVALID CHECKSUM';
+        valValidity.className = 'badge-red';
+      } else if (checksumStatus === 'WARN') {
+        valValidity.textContent = 'REVIEW REQUIRED';
+        valValidity.className = 'badge-yellow';
       } else if (data.doc_type === 'UNKNOWN') {
         valValidity.textContent = 'UNRECOGNIZED';
         valValidity.className = 'badge-yellow';
+      } else if (data.validation && data.validation.valid === false) {
+        valValidity.textContent = 'INVALID';
+        valValidity.className = 'badge-red';
       } else {
         valValidity.textContent = 'ACTIVE / VALID';
         valValidity.className = 'badge-green';
