@@ -656,7 +656,92 @@ def parse_permit_fields(text: str) -> Dict[str, Any]:
     dates = re.findall(r"\b(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})\b", text)
     if dates:
         fields["valid_until"] = dates[-1]
-    return fields
+_AADHAAR_EXCLUDE_TOKENS = {
+    # UIDAI & Government administration
+    "GOVERNMENT", "GOVT", "INDIA", "BHARAT", "SARKAR", "UNIQUE", "IDENTIFICATION",
+    "AUTHORITY", "UIDAI", "AADHAAR", "AADHAR", "PEHCHAN", "ENROLMENT", "ENROLLMENT",
+    "VID", "HELP", "HELPLINE", "DOWNLOAD", "ISSUE", "PRINT", "CARD", "ELECTRONIC",
+    "NATIONAL", "REPUBLIC", "DEPARTMENT", "STATE", "UNION", "MERI", "MERA",
+
+    # Document metadata & demographic labels
+    "DOB", "DATE", "BIRTH", "YEAR", "YOB", "GENDER", "SEX", "MALE", "FEMALE",
+    "TRANSGENDER", "PURUSH", "MAHILA", "JANM", "TITHI", "LING", "VALID", "VALIDITY",
+    "EXPIRES", "SIGNATURE", "DIGITALLY", "SIGNED",
+
+    # Address & geographic terms
+    "ADDRESS", "PATA", "VILLAGE", "POST", "OFFICE", "DISTRICT", "PIN", "PINCODE",
+    "ROAD", "STREET", "LANE", "NAGAR", "COLONY", "MARG", "HOUSE", "PLOT", "BLOCK",
+    "SECTOR", "NEAR", "OPP", "OPPOSITE", "FLOOR", "APARTMENT", "FLAT", "TALUK",
+    "TALUKA", "TEHSIL", "CITY", "DIST", "POLICE", "STATION",
+
+    # Relationship / guardian prefixes
+    "FATHER", "HUSBAND", "WIFE", "MOTHER", "DAUGHTER", "SON", "CARE", "PITA",
+    "PATI", "PATNI", "MATA", "S/O", "D/O", "W/O", "C/O",
+
+    # Web, tech & contact
+    "WWW", "HTTP", "HTTPS", "COM", "GOV", "ORG", "NET", "EMAIL", "MAIL",
+    "WEBSITE", "PHONE", "TEL", "MOBILE", "TOLL", "FREE", "TOLLFREE", "1947", "QR", "CODE",
+
+    # Common English words that appear in OCR noise/instructions and are not names
+    "FEW", "EER", "STR", "AND", "THE", "FOR", "WITH", "FROM", "DOWNLOAD",
+    "INFORMATION", "PORTAL"
+}
+
+
+def _clean_and_validate_aadhaar_name(candidate: str, raw_line: Optional[str] = None) -> Optional[str]:
+    """
+    Validates candidate name text against OCR noise, symbol pollution, and non-name text.
+    Rejects strings like 'Sew STR NK Or Ww few om eer' and ensures high confidence.
+    """
+    if not candidate:
+        return None
+
+    if raw_line:
+        clean_raw = raw_line.strip()
+        if clean_raw:
+            # Reject lines dominated by symbols (OCR noise)
+            symbols = sum(1 for c in clean_raw if not c.isalnum() and not c.isspace() and c not in ".,'-/")
+            if symbols / max(1, len(clean_raw)) > 0.25:
+                return None
+            # Reject lines with 4 or more digits (ID numbers, dates, PIN codes)
+            if sum(1 for c in clean_raw if c.isdigit()) >= 4:
+                return None
+
+    # Keep only Latin alphabets, dots (for initials), and spaces
+    cand_latin = re.sub(r"[^A-Za-z\s\.]", " ", candidate)
+    clean_name = " ".join(cand_latin.split()).strip()
+    if len(clean_name) < 3 or len(clean_name) > 35:
+        return None
+
+    words = [w.strip(".") for w in clean_name.split() if w.strip(".")]
+    if not words or len(words) > 4:
+        return None
+
+    clean_upper = clean_name.upper()
+    for tok in _AADHAAR_EXCLUDE_TOKENS:
+        if re.search(r"\b" + re.escape(tok) + r"\b", clean_upper):
+            return None
+
+    for w in words:
+        # Every word of 2+ chars must contain at least one vowel
+        if len(w) >= 2 and not any(c in "AEIOUYaeiouy" for c in w):
+            return None
+
+    # Avoid candidate that is mostly single-letter initials
+    if sum(1 for w in words if len(w) == 1) > 2:
+        return None
+
+    # Official ID card names are never all-lowercase
+    if all(w.islower() for w in words):
+        return None
+
+    # Reject OCR noise with mixed all-lowercase and all-uppercase words (e.g. 'Sew STR NK Or Ww few om eer')
+    has_all_lower = any(len(w) >= 2 and w.islower() for w in words)
+    has_all_upper = any(len(w) >= 2 and w.isupper() for w in words)
+    if has_all_lower and has_all_upper:
+        return None
+
+    return clean_name
 
 
 def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
@@ -705,63 +790,91 @@ def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
         fields["gender"] = "TRANSGENDER"
 
     # 4. Name extraction
-    _EXCLUDE_NAME_TOKENS = [
-        "GOVERNMENT", "INDIA", "AADHAAR", "AADHAR", "UIDAI", "UNIQUE", "IDENTIFICATION",
-        "AUTHORITY", "PEHCHAN", "BHARAT", "SARKAR", "DOB", "GENDER", "MALE", "FEMALE",
-        "ENROLMENT", "HELP", "DOWNLOAD", "ISSUE", "VID", "DATE", "BIRTH", "YEAR", "FATHER",
-        "HUSBAND", "WIFE", "ADDRESS", "PIN", "WWW", "HTTP", "MERI", "MERA", "PURUSH", "MAHILA"
-    ]
+    raw_lines = [l.strip() for l in text.splitlines() if l.strip()]
 
-    # Strategy A: Direct label match "Name: <name>" or "Name\n<name>"
-    nm_match = re.search(r"(?:Name|Naam)[\s:/=>]*\n?([A-Za-z][A-Za-z ]{2,30})", text, re.IGNORECASE)
-    if nm_match:
-        cand = nm_match.group(1).strip()
-        if not any(k in cand.upper() for k in _EXCLUDE_NAME_TOKENS):
-            fields["name"] = cand
+    # PRIORITY 1: Highest priority to text immediately following explicit name labels
+    # Recognizes "Name", "Full Name", "नाम", "पूरा नाम", "Naam", "नाम / Name", "Name / नाम"
+    name_label_pattern = re.compile(
+        r"(?:नाम\s*[/]\s*Name|Name\s*[/]\s*नाम|Full\s+Name|पूरा\s+नाम|\bName\b|\bNaam\b|नाम)",
+        re.IGNORECASE
+    )
 
-    # Strategy B: Line inspection with symbol stripping
-    if not fields["name"]:
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
-        for i, line in enumerate(lines):
-            if re.search(r"\bName\b", line, re.IGNORECASE):
-                for next_l in lines[i+1:i+4]:
-                    cand = re.sub(r"^[^A-Za-z]+", "", next_l).strip()
-                    if cand and len(cand) >= 3 and not any(k in cand.upper() for k in _EXCLUDE_NAME_TOKENS):
-                        if re.match(r"^[A-Za-z][A-Za-z ]{2,30}$", cand):
-                            fields["name"] = cand
-                            break
-                if fields["name"]:
+    for i, line in enumerate(raw_lines):
+        m = name_label_pattern.search(line)
+        if m:
+            # Case 1A: Name is on the same line after the label (e.g. "Name: Aakash Verma" or "नाम: Aakash Verma")
+            remainder = line[m.end():].strip()
+            remainder = re.sub(r"^[:;=\-—|/\.]+", "", remainder).strip()
+            if remainder:
+                cand = _clean_and_validate_aadhaar_name(remainder, raw_line=remainder)
+                if cand:
+                    fields["name"] = cand
                     break
 
-    # Strategy C1: Line immediately preceding DOB / Gender (standard UIDAI physical card layout)
-    if not fields["name"]:
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
-        dob_idx = -1
-        for i, line in enumerate(lines):
-            if re.search(r"\b(DOB|Date of Birth|Birth|YOB|Year of Birth)\b", line, re.IGNORECASE):
-                dob_idx = i
+            # Case 1B: Name is on subsequent line(s) immediately following the label
+            for next_idx in range(i + 1, min(i + 4, len(raw_lines))):
+                next_line = raw_lines[next_idx]
+                if re.search(r"\b(DOB|Date of Birth|Birth|YOB|Gender|Male|Female)\b", next_line, re.IGNORECASE):
+                    break
+                if re.search(r"\b\d{4}\s\d{4}\s\d{4}\b", next_line):
+                    break
+                cand = _clean_and_validate_aadhaar_name(next_line, raw_line=next_line)
+                if cand:
+                    fields["name"] = cand
+                    break
+            if fields["name"]:
                 break
-        if dob_idx > 0:
-            for k in range(dob_idx - 1, max(-1, dob_idx - 4), -1):
-                clean_l = re.sub(r"^[^A-Za-z]+", "", lines[k]).strip()
-                clean_l = re.sub(r"[^A-Za-z\s]", "", clean_l).strip()
-                if len(clean_l) >= 3 and not any(tok in clean_l.upper() for tok in _EXCLUDE_NAME_TOKENS):
-                    if re.match(r"^[A-Za-z][A-Za-z\s]{2,30}$", clean_l):
-                        fields["name"] = clean_l
-                        break
 
-    # Strategy C2: Fallback proper name before DOB/Gender with strict exclusion
+    # PRIORITY 2: Standard UIDAI physical card layout (Name situated between Header and DOB/Gender)
     if not fields["name"]:
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
-        for line in lines:
-            clean_l = re.sub(r"^[^A-Za-z]+", "", line).strip()
-            clean_l = re.sub(r"[^A-Za-z\s]", "", clean_l).strip()
-            if len(clean_l) >= 3 and not any(k in clean_l.upper() for k in _EXCLUDE_NAME_TOKENS):
-                if re.match(r"^[A-Za-z][A-Za-z\s]{2,30}$", clean_l):
-                    fields["name"] = clean_l
+        header_keywords = ["GOVERNMENT", "INDIA", "BHARAT", "SARKAR", "UNIQUE", "IDENTIFICATION", "AUTHORITY", "UIDAI"]
+        dob_keywords = ["DOB", "DATE OF BIRTH", "BIRTH", "YOB", "YEAR OF BIRTH", "GENDER", "MALE", "FEMALE", "PURUSH", "MAHILA"]
+
+        dob_line_idx = -1
+        for i, line in enumerate(raw_lines):
+            if any(re.search(r"\b" + re.escape(kw) + r"\b", line.upper()) for kw in dob_keywords):
+                dob_line_idx = i
+                break
+
+        header_last_idx = -1
+        for i, line in enumerate(raw_lines):
+            if any(re.search(r"\b" + re.escape(kw) + r"\b", line.upper()) for kw in header_keywords):
+                header_last_idx = i
+
+        if dob_line_idx > 0:
+            # Inspect lines before DOB backward up to header_last_idx (or max 5 lines prior)
+            search_start = dob_line_idx - 1
+            search_end = max(header_last_idx, dob_line_idx - 5)
+            for k in range(search_start, search_end, -1):
+                line = raw_lines[k]
+                cand = _clean_and_validate_aadhaar_name(line, raw_line=line)
+                if cand:
+                    fields["name"] = cand
                     break
 
+    # PRIORITY 3: General layout between Header and ID Number
+    if not fields["name"]:
+        header_last_idx = -1
+        for i, line in enumerate(raw_lines):
+            if any(re.search(r"\b" + re.escape(kw) + r"\b", line.upper()) for kw in ["GOVERNMENT", "INDIA", "UNIQUE", "IDENTIFICATION", "UIDAI", "AUTHORITY"]):
+                header_last_idx = i
+
+        id_line_idx = len(raw_lines)
+        for i, line in enumerate(raw_lines):
+            if re.search(r"\b\d{4}[\s\-]*\d{4}[\s\-]*\d{4}\b", line) or re.search(r"\b[Xx\*\.]{4}\s[Xx\*\.]{4}\s\d{4}\b", line):
+                id_line_idx = i
+                break
+
+        for k in range(max(0, header_last_idx + 1), id_line_idx):
+            line = raw_lines[k]
+            cand = _clean_and_validate_aadhaar_name(line, raw_line=line)
+            if cand:
+                fields["name"] = cand
+                break
+
+    # If OCR cannot reliably determine name, fields["name"] remains None (safe fallback).
     return fields
+
 
 
 def _clean_pan_token(token: str) -> Optional[str]:

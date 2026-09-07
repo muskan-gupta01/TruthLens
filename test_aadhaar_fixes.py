@@ -8,6 +8,12 @@ Validates:
 5. End-to-end mock screening of real modern Aadhaar profile (LOW RISK / VERIFIED)
 """
 import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 from PIL import Image
 from app.pipeline.cross_verifier import compare_id_numbers, compare_names, cross_verify_documents
 from app.pipeline.format_validator import validate_aadhaar_number, validate_verhoeff
@@ -100,7 +106,70 @@ def run_aadhaar_tests():
     fields_split = parse_aadhaar_fields(sample_text_split)
     assert fields_split["name"] == "Priya Kumari", f"Expected 'Priya Kumari', got '{fields_split['name']}'"
 
-    print("  >>> PASS: 'Unique Identification' and administrative headers are strictly excluded!")
+    # Subtest 3.1: Reject OCR noise garbage (Sew STR NK Or Ww few om eer) when no valid name exists
+    sample_noise_only = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    DOB: 12/05/1992
+    MALE
+    5489 2104 7834
+    """
+    fields_noise = parse_aadhaar_fields(sample_noise_only)
+    assert fields_noise["name"] is None, f"Expected None for OCR garbage, got '{fields_noise['name']}'"
+
+    # Subtest 3.2: Highest priority to text immediately following 'Name:' even with noise present
+    sample_with_label_and_noise = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    Name: Aakash Verma
+    DOB: 12/05/1992
+    MALE
+    5489 2104 7834
+    """
+    fields_lbl = parse_aadhaar_fields(sample_with_label_and_noise)
+    assert fields_lbl["name"] == "Aakash Verma", f"Expected 'Aakash Verma', got '{fields_lbl['name']}'"
+
+    # Subtest 3.3: Hindi label 'नाम:' priority
+    sample_hindi_label = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    नाम: रोहित शर्मा
+    Rohit Sharma
+    DOB: 15/08/1995
+    MALE
+    5489 2104 7834
+    """
+    fields_hindi = parse_aadhaar_fields(sample_hindi_label)
+    assert fields_hindi["name"] == "Rohit Sharma", f"Expected 'Rohit Sharma', got '{fields_hindi['name']}'"
+
+    # Subtest 3.4: Bilingual label 'नाम / Name:' priority
+    sample_bilingual = """
+    GOVERNMENT OF INDIA
+    Unique Identification Authority of India
+    Sew STR NK Or Ww few om eer
+    नाम / Name: Suresh Kumar
+    DOB: 20/11/1988
+    MALE
+    5489 2104 7834
+    """
+    fields_bi = parse_aadhaar_fields(sample_bilingual)
+    assert fields_bi["name"] == "Suresh Kumar", f"Expected 'Suresh Kumar', got '{fields_bi['name']}'"
+
+    # Subtest 3.5: Reject address, website, and symbol noise
+    sample_address_noise = """
+    Address: S/O Ramesh Kumar, House 42, MG Road, Indiranagar, Bangalore 560038
+    www.uidai.gov.in
+    1947
+    help@uidai.gov.in
+    ~*^$ Sew STR NK Or Ww few om eer
+    """
+    fields_addr = parse_aadhaar_fields(sample_address_noise)
+    assert fields_addr["name"] is None, f"Expected None for address/website text, got '{fields_addr['name']}'"
+
+    print("  >>> PASS: 'Unique Identification' excluded, OCR noise strictly rejected, label priority verified!")
     passed += 1
 
     # =========================================================================
