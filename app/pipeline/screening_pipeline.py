@@ -340,10 +340,15 @@ def run_truthlens_screening(
     # High-level summary statement
     if is_mismatch or is_non_identity:
         summary = f"CRITICAL FRAUD REJECTION: Presented as '{claimed_type}' but confirmed as a non-identity commercial document ({doc_type.replace('_', ' ').title()}). Lacks all statutory government credentials (Risk Score: {risk_score}/100)."
+    elif is_critical:
+        summary = f"HIGH RISK ALERT: Rejected due to {len(risk_report['factors'])} security violation(s) (Risk Score: {risk_score}/100)."
     elif doc_type == DOC_TYPE_UNKNOWN or (not name_val and not num_val):
         summary = f"INCOMPLETE SCREENING: Document could not be recognized as a valid institutional identity format (Risk Score: {risk_score}/100)."
     elif checksum_status == "FAIL":
-        summary = f"Mathematical Checksum Failure: Aadhaar number failed Verhoeff algorithm verification (Risk Score: {risk_score}/100)."
+        if doc_type == DOC_TYPE_AADHAAR:
+            summary = f"Mathematical Checksum Failure: Aadhaar number failed Verhoeff algorithm verification (Risk Score: {risk_score}/100)."
+        else:
+            summary = f"Mathematical Checksum Failure: {doc_type.replace('_', ' ').title()} failed check digit verification (Risk Score: {risk_score}/100)."
     elif checksum_status == "WARN":
         summary = f"Review recommended: Checksum verification inconclusive due to OCR uncertainty (Risk Score: {risk_score}/100)."
     elif is_genuine:
