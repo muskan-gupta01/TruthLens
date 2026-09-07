@@ -9,6 +9,7 @@
   // Modal elements
   const loginModal = document.getElementById("loginModal");
   const signupModal = document.getElementById("signupModal");
+  const forgotPasswordModal = document.getElementById("forgotPasswordModal");
 
   const openLoginBtn = document.getElementById("openLogin");
   const openSignupBtn = document.getElementById("openSignup");
@@ -16,6 +17,9 @@
 
   const closeLoginBtn = document.getElementById("closeLogin");
   const closeSignupBtn = document.getElementById("closeSignup");
+  const openForgotPasswordBtn = document.getElementById("openForgotPassword");
+  const closeForgotPasswordBtn = document.getElementById("closeForgotPassword");
+  const backToLoginBtn = document.getElementById("backToLogin");
 
   const switchToSignup = document.getElementById("switchToSignup");
   const switchToLogin = document.getElementById("switchToLogin");
@@ -25,6 +29,10 @@
   const signupForm = document.getElementById("signupForm");
   const loginMessage = document.getElementById("loginMessage");
   const signupMessage = document.getElementById("signupMessage");
+  const forgotPasswordForm = document.getElementById("forgotPasswordForm");
+  const forgotPasswordMessage = document.getElementById("forgotPasswordMessage");
+  const otpResetFields = document.getElementById("otpResetFields");
+  const requestOtpButton = document.getElementById("requestOtpButton");
 
   // Header auth elements
   const guestHeaderButtons = document.getElementById("guestHeaderButtons");
@@ -35,6 +43,7 @@
   function closeAllModals() {
     if (loginModal) loginModal.classList.remove("active");
     if (signupModal) signupModal.classList.remove("active");
+    if (forgotPasswordModal) forgotPasswordModal.classList.remove("active");
     if (loginMessage) {
       loginMessage.className = "message";
       loginMessage.textContent = "";
@@ -42,6 +51,10 @@
     if (signupMessage) {
       signupMessage.className = "message";
       signupMessage.textContent = "";
+    }
+    if (forgotPasswordMessage) {
+      forgotPasswordMessage.className = "message";
+      forgotPasswordMessage.textContent = "";
     }
   }
 
@@ -63,6 +76,15 @@
     }
   }
 
+  function openForgotPasswordModal() {
+    closeAllModals();
+    if (forgotPasswordModal) {
+      forgotPasswordModal.classList.add("active");
+      const phoneInput = document.getElementById("forgotPhone");
+      if (phoneInput) setTimeout(() => phoneInput.focus(), 100);
+    }
+  }
+
   let currentUser = null;
 
   function handleGetStarted(e) {
@@ -79,11 +101,20 @@
   // Bind Openers
   if (openLoginBtn) openLoginBtn.addEventListener("click", openLoginModal);
   if (openSignupBtn) openSignupBtn.addEventListener("click", openSignupModal);
+  if (openForgotPasswordBtn) openForgotPasswordBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    openForgotPasswordModal();
+  });
   if (getStartedBtn) getStartedBtn.addEventListener("click", handleGetStarted);
 
   // Bind Closers
   if (closeLoginBtn) closeLoginBtn.addEventListener("click", closeAllModals);
   if (closeSignupBtn) closeSignupBtn.addEventListener("click", closeAllModals);
+  if (closeForgotPasswordBtn) closeForgotPasswordBtn.addEventListener("click", closeAllModals);
+  if (backToLoginBtn) backToLoginBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    openLoginModal();
+  });
 
   // Switch between Login and Signup
   if (switchToSignup) {
@@ -102,7 +133,7 @@
 
   // Close modals on clicking backdrop
   window.addEventListener("click", function (e) {
-    if (e.target === loginModal || e.target === signupModal) {
+    if (e.target === loginModal || e.target === signupModal || e.target === forgotPasswordModal) {
       closeAllModals();
     }
   });
@@ -189,6 +220,65 @@
           submitBtn.disabled = false;
           submitBtn.textContent = originalText;
         }
+      }
+    });
+  }
+
+  if (requestOtpButton) {
+    requestOtpButton.addEventListener("click", async function () {
+      const phone = document.getElementById("forgotPhone").value.trim();
+      if (!phone) {
+        showForgotPasswordMessage("Enter your registered phone number.", "error");
+        return;
+      }
+
+      requestOtpButton.disabled = true;
+      requestOtpButton.textContent = "Sending OTP...";
+      try {
+        const res = await fetch("/api/auth/forgot-password/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Unable to send OTP.");
+
+        otpResetFields.classList.remove("hidden");
+        const otpHint = data.development_otp ? ` Development OTP: ${data.development_otp}` : "";
+        showForgotPasswordMessage(`OTP generated for ${data.masked_phone}.${otpHint}`, "success");
+        requestOtpButton.textContent = "Resend OTP";
+      } catch (err) {
+        showForgotPasswordMessage(err.message, "error");
+        requestOtpButton.textContent = "Send OTP";
+      } finally {
+        requestOtpButton.disabled = false;
+      }
+    });
+  }
+
+  if (forgotPasswordForm) {
+    forgotPasswordForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const phone = document.getElementById("forgotPhone").value.trim();
+      const otp = document.getElementById("resetOtp").value.trim();
+      const newPassword = document.getElementById("newPassword").value;
+      if (!otp || !newPassword) {
+        showForgotPasswordMessage("Enter the OTP and your new password.", "error");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/auth/forgot-password/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone, otp, new_password: newPassword })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Unable to reset password.");
+        showForgotPasswordMessage(data.message, "success");
+        setTimeout(openLoginModal, 900);
+      } catch (err) {
+        showForgotPasswordMessage(err.message, "error");
       }
     });
   }
@@ -280,6 +370,12 @@
     if (!signupMessage) return;
     signupMessage.textContent = text;
     signupMessage.className = "message " + type;
+  }
+
+  function showForgotPasswordMessage(text, type) {
+    if (!forgotPasswordMessage) return;
+    forgotPasswordMessage.textContent = text;
+    forgotPasswordMessage.className = "message " + type;
   }
 
   // =========================================================================

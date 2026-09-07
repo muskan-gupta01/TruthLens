@@ -945,6 +945,19 @@ def extract_document_fields(
                     mismatch_reason = c_rot["mismatch_reason"]
                     break
 
+    # A user-specified government document type is a useful hint when OCR is
+    # inconclusive. Do not turn unreadable text into a confirmed non-identity.
+    if (
+        claimed_type in MRZ_SUPPORTED_TYPES.union(NON_MRZ_TYPES)
+        and detected_type in [DOC_TYPE_UNKNOWN, DOC_TYPE_NON_IDENTITY]
+        and not classification.get("evidence", {}).get(DOC_TYPE_BUSINESS_CARD)
+    ):
+        detected_type = claimed_type
+        is_claimed_mismatch = False
+        is_non_identity = False
+        mismatch_reason = f"OCR inconclusive; continuing checks using selected document type '{claimed_type}'."
+        classification["uncertainty"] = True
+
     fields: Dict[str, Any] = {}
 
     if detected_type == DOC_TYPE_PASSPORT:

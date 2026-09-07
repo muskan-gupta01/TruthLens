@@ -18,6 +18,8 @@ import io
 import os
 import re
 import base64
+import secrets
+import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Response
@@ -42,6 +44,8 @@ from app.database.db_manager import (
     get_dashboard_statistics,
     register_user,
     authenticate_user,
+    find_user_by_phone,
+    reset_user_password,
     create_user_session,
     validate_user_session,
     delete_user_session,
@@ -67,6 +71,8 @@ app.add_middleware(
 
 # Mount static directory
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+_password_reset_otps: Dict[str, Dict[str, Any]] = {}
 
 
 def _extract_session_token(request: Request) -> Optional[str]:
@@ -324,6 +330,63 @@ async def api_login(request: Request):
         path="/"
     )
     return res
+
+
+@app.post("/api/auth/forgot-password/request")
+async def request_password_reset(request: Request):
+    """Creates a short-lived OTP for local password recovery by phone number."""
+    data = await request.json()
+    phone = str(data.get("phone", "")).strip()
+    normalized_phone = "".join(ch for ch in phone if ch.isdigit())
+    if len(normalized_phone) < 8:
+        raise HTTPException(status_code=400, detail="Enter a valid phone number.")
+
+    user = find_user_by_phone(normalized_phone)
+    if not user:
+        raise HTTPException(status_code=404, detail="No account is registered with this phone number.")
+
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    _password_reset_otps[normalized_phone] = {
+        "otp": otp,
+        "expires_at": time.time() + 600,
+        "attempts": 0
+    }
+    response = {
+        "success": True,
+        "message": "OTP generated. Verify it to create a new password.",
+        "masked_phone": f"***{normalized_phone[-4:]}"
+    }
+    if not IS_PRODUCTION:
+        response["development_otp"] = otp
+    return response
+
+
+@app.post("/api/auth/forgot-password/reset")
+async def reset_password(request: Request):
+    """Verifies the OTP and updates the account password."""
+    data = await request.json()
+    phone = str(data.get("phone", "")).strip()
+    otp = str(data.get("otp", "")).strip()
+    new_password = str(data.get("new_password", ""))
+    normalized_phone = "".join(ch for ch in phone if ch.isdigit())
+    record = _password_reset_otps.get(normalized_phone)
+
+    if not record or time.time() > record["expires_at"]:
+        _password_reset_otps.pop(normalized_phone, None)
+        raise HTTPException(status_code=400, detail="OTP is missing or expired. Request a new OTP.")
+    if record["attempts"] >= 5:
+        _password_reset_otps.pop(normalized_phone, None)
+        raise HTTPException(status_code=429, detail="Too many incorrect OTP attempts. Request a new OTP.")
+    if not secrets.compare_digest(otp, record["otp"]):
+        record["attempts"] += 1
+        raise HTTPException(status_code=400, detail="Incorrect OTP.")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters long.")
+    if not reset_user_password(normalized_phone, new_password):
+        raise HTTPException(status_code=404, detail="Account not found for this phone number.")
+
+    _password_reset_otps.pop(normalized_phone, None)
+    return {"success": True, "message": "Password reset successfully. You can log in now."}
 
 
 @app.post("/api/auth/logout")

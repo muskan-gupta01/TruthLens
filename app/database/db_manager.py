@@ -712,6 +712,57 @@ def authenticate_user(email: str, password: str) -> Optional[Dict[str, Any]]:
     }
 
 
+def find_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
+    """Finds an account by its normalized phone number for password recovery."""
+    normalized_phone = "".join(ch for ch in str(phone) if ch.isdigit())
+    if not normalized_phone:
+        return None
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users")
+    rows = cursor.fetchall()
+    conn.close()
+
+    for row in rows:
+        stored_phone = "".join(ch for ch in str(row["phone"] or "") if ch.isdigit())
+        if stored_phone == normalized_phone:
+            return {
+                "user_id": row["user_id"],
+                "full_name": row["full_name"],
+                "email": row["email"],
+                "phone": row["phone"],
+                "role": row["role"]
+            }
+    return None
+
+
+def reset_user_password(phone: str, new_password: str) -> bool:
+    """Updates the password for an account selected by its phone number."""
+    normalized_phone = "".join(ch for ch in str(phone) if ch.isdigit())
+    if not normalized_phone or len(new_password) < 6:
+        return False
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, phone FROM users")
+    matched_id = None
+    for row in cursor.fetchall():
+        stored_phone = "".join(ch for ch in str(row["phone"] or "") if ch.isdigit())
+        if stored_phone == normalized_phone:
+            matched_id = row["id"]
+            break
+
+    if matched_id is None:
+        conn.close()
+        return False
+
+    cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new_password), matched_id))
+    conn.commit()
+    conn.close()
+    return True
+
+
 def create_user_session(user_id: str, email: str, duration_hours: int = 168) -> Dict[str, Any]:
     """Creates a new user session token valid for duration_hours (default 7 days)."""
     session_token = secrets.token_urlsafe(32)

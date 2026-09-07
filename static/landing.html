@@ -9,7 +9,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<<<<<<< HEAD
   <link rel="stylesheet" href="/static/css/landing.css?v=3.0">
+=======
+  <link rel="stylesheet" href="/static/css/landing.css?v=3.2">
+>>>>>>> 58dd9d1 (changes in frontend)
 </head>
 
 <body>
@@ -220,6 +224,10 @@
         <button type="submit" class="primary-btn form-submit" id="btnLoginSubmit">Log In</button>
       </form>
 
+      <p class="form-link forgot-password-link">
+        <a href="#" id="openForgotPassword">Forgot password?</a>
+      </p>
+
       <!-- Demo Credentials Helper -->
       <div class="demo-creds-box">
         <div class="demo-creds-title">
@@ -241,6 +249,37 @@
         New to TruthLens?
         <a href="#" id="switchToSignup">Create an account</a>
       </p>
+    </div>
+  </div>
+
+  <div class="modal" id="forgotPasswordModal">
+    <div class="form-box">
+      <button type="button" class="close-btn" id="closeForgotPassword" aria-label="Close modal">&times;</button>
+      <h2>Reset Password</h2>
+      <p>Verify your registered phone number with an OTP.</p>
+      <div class="message" id="forgotPasswordMessage"></div>
+
+      <form id="forgotPasswordForm">
+        <label for="forgotPhone">Registered Phone Number</label>
+        <input type="tel" id="forgotPhone" placeholder="XXX-XXXXX-XXXX" required autocomplete="tel">
+
+        <button type="button" class="primary-btn form-submit" id="requestOtpButton">Send OTP</button>
+
+        <div id="otpResetFields" class="hidden">
+          <label for="resetOtp">Verification OTP</label>
+          <input type="text" id="resetOtp" placeholder="Enter 6-digit OTP" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+
+          <label for="newPassword">New Password</label>
+          <div class="password-field">
+            <input type="password" id="newPassword" placeholder="Minimum 6 characters" autocomplete="new-password">
+            <button type="button" class="password-toggle" data-password-target="newPassword" aria-label="Show password" title="Show password">&#128065;</button>
+          </div>
+
+          <button type="submit" class="primary-btn form-submit" id="resetPasswordButton">Reset Password</button>
+        </div>
+      </form>
+
+      <p class="form-link"><a href="#" id="backToLogin">Back to Log In</a></p>
     </div>
   </div>
 
@@ -288,6 +327,10 @@
     </div>
   </div>
 
+<<<<<<< HEAD
   <script src="/static/js/auth.js?v=3.0"></script>
+=======
+  <script src="/static/js/auth.js?v=3.2"></script>
+>>>>>>> 58dd9d1 (changes in frontend)
 </body>
 </html>
