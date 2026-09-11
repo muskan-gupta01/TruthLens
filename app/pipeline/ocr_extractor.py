@@ -756,8 +756,8 @@ def _clean_and_validate_aadhaar_name(candidate: str, raw_line: Optional[str] = N
 
 
 def parse_aadhaar_fields(text: str) -> Dict[str, Any]:
-    """Extracts Aadhaar fields (ID Number, Name, DOB, Gender)."""
-    fields: Dict[str, Any] = {"id_number": None, "dob": None, "gender": None, "name": None}
+    """Extracts Aadhaar fields (ID Number, Name, DOB, Gender, Issuing Country)."""
+    fields: Dict[str, Any] = {"id_number": None, "dob": None, "gender": None, "name": None, "issuing_country": "India"}
 
     # 1. Aadhaar Number (12-digit standard or statutory masked XXXX XXXX 1234)
     # Flexible 12-digit match: 4+4+4, 4+8, 8+4, or 12 continuous digits with optional spaces/hyphens

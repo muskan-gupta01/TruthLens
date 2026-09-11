@@ -876,7 +876,7 @@
     if (docBadge) docBadge.textContent = (data.doc_type || 'DOCUMENT').replace(/_/g, ' ');
     if (valName) valName.textContent = dossier.subject_name || fields.full_name || fields.name || 'Not Detected';
     if (valNum) valNum.textContent = dossier.doc_number || fields.passport_number || fields.id_number || fields.visa_number || 'Not Detected';
-    if (valCountry) valCountry.textContent = dossier.nationality || fields.nationality || fields.issuing_country || 'N/A';
+    if (valCountry) valCountry.textContent = (data.doc_type === 'AADHAAR' ? 'India' : (dossier.issuing_country || fields.issuing_country || dossier.nationality || fields.nationality || 'N/A'));
     if (valDob) valDob.textContent = dossier.dob || fields.dob || 'N/A';
     if (valExpiry) valExpiry.textContent = dossier.expiry_date || fields.expiry_date || 'N/A';
 
