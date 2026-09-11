@@ -38,6 +38,17 @@ from app.pipeline.mrz_parser import find_and_parse_mrz
 if TESSERACT_PATH:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
+# Document types supported for MRZ and non-MRZ processing
+MRZ_SUPPORTED_TYPES = {DOC_TYPE_PASSPORT, DOC_TYPE_VISA}
+NON_MRZ_TYPES = {
+    DOC_TYPE_AADHAAR,
+    DOC_TYPE_PAN,
+    DOC_TYPE_DRIVING_LICENSE,
+    DOC_TYPE_PERMIT,
+    DOC_TYPE_BUSINESS_CARD,
+    DOC_TYPE_NON_IDENTITY
+}
+
 
 def preprocess_image_for_ocr(cv_image: np.ndarray, binarize: bool = False) -> np.ndarray:
     """
