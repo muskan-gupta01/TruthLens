@@ -643,11 +643,26 @@ def parse_driving_license_fields(text: str) -> Dict[str, Any]:
         fields["full_name"] = " ".join(m_name.group(1).split()).upper()
 
     dates = re.findall(r"\b(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})\b", text)
-    if len(dates) >= 2:
+    if len(dates) >= 3:
+        fields["dob"] = dates[0]
+        fields["issue_date"] = dates[1]
+        fields["expiry_date"] = dates[2]
+    elif len(dates) == 2:
         fields["dob"] = dates[0]
         fields["expiry_date"] = dates[1]
     elif len(dates) == 1:
         fields["dob"] = dates[0]
+
+    # Explicit label overrides if present
+    m_exp = re.search(r"(?:Valid\s*(?:Till|Until|Upto|NT)|Expiry|Expires)[\s:]*(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})", text, re.IGNORECASE)
+    if m_exp:
+        fields["expiry_date"] = m_exp.group(1)
+    m_iss = re.search(r"(?:Date\s*of\s*Issue|Issue\s*Date|Issued)[\s:]*(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})", text, re.IGNORECASE)
+    if m_iss:
+        fields["issue_date"] = m_iss.group(1)
+    m_dob = re.search(r"(?:Date\s*of\s*Birth|DOB|Birth)[\s:]*(\d{2}[/\-\.]\d{2}[/\-\.]\d{4})", text, re.IGNORECASE)
+    if m_dob:
+        fields["dob"] = m_dob.group(1)
 
     return fields
 

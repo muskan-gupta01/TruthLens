@@ -297,6 +297,17 @@ def run_truthlens_screening(
         else:
             checksum_status = "PASS" if format_pass else "WARN"
             checksum_detail = "Income Tax Dept 10-character structure valid."
+    elif doc_type == DOC_TYPE_DRIVING_LICENSE:
+        dl_check = next((c for c in validation_result.get("checklist", []) if any(k in (c.get("check") or c.get("name") or "") for k in ["Driving License", "DL"])), None)
+        if dl_check and dl_check.get("status") == "PASS":
+            checksum_status = "PASS"
+            checksum_detail = dl_check.get("detail", "MoRTH Driving License format & state jurisdiction valid.")
+        elif dl_check:
+            checksum_status = dl_check.get("status", "FAIL")
+            checksum_detail = dl_check.get("detail", "Invalid Driving License structure or unrecognized state code.")
+        else:
+            checksum_status = "PASS" if format_pass else "WARN"
+            checksum_detail = "MoRTH Driving License format & state jurisdiction valid."
     else:
         checksum_status = "PASS" if format_pass else "WARN"
         checksum_detail = "Standard institutional syntax inspection."
@@ -347,6 +358,8 @@ def run_truthlens_screening(
     elif checksum_status == "FAIL":
         if doc_type == DOC_TYPE_AADHAAR:
             summary = f"Mathematical Checksum Failure: Aadhaar number failed Verhoeff algorithm verification (Risk Score: {risk_score}/100)."
+        elif doc_type == DOC_TYPE_DRIVING_LICENSE:
+            summary = f"Structure / Jurisdiction Failure: Driving License failed MoRTH state or year verification (Risk Score: {risk_score}/100)."
         else:
             summary = f"Mathematical Checksum Failure: {doc_type.replace('_', ' ').title()} failed check digit verification (Risk Score: {risk_score}/100)."
     elif checksum_status == "WARN":
@@ -407,8 +420,8 @@ def run_truthlens_screening(
         "validity_badge_class": validity_badge_class,
         "subject_name": name_val or "Not Detected",
         "doc_number": num_val or "Not Detected",
-        "issuing_country": "India" if doc_type == DOC_TYPE_AADHAAR else (fields.get("issuing_country") or fields.get("nationality") or "N/A"),
-        "nationality": "India" if doc_type == DOC_TYPE_AADHAAR else (fields.get("nationality") or fields.get("issuing_country") or "N/A"),
+        "issuing_country": "India" if doc_type in [DOC_TYPE_AADHAAR, DOC_TYPE_PAN, DOC_TYPE_DRIVING_LICENSE] else (fields.get("issuing_country") or fields.get("nationality") or "N/A"),
+        "nationality": "India" if doc_type in [DOC_TYPE_AADHAAR, DOC_TYPE_PAN, DOC_TYPE_DRIVING_LICENSE] else (fields.get("nationality") or fields.get("issuing_country") or "N/A"),
         "dob": fields.get("dob") or "N/A",
         "expiry_date": fields.get("expiry_date") or "N/A",
         "doc_type_display": doc_type.replace("_", " ").title(),

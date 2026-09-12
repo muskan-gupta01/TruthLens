@@ -624,6 +624,120 @@ def make_tampered_pan():
     print(f"Generated: {out_path.name}")
 
 
+def make_genuine_dl():
+    """Generates genuine Indian Driving License mock card (Delhi RTO)."""
+    w, h = 860, 540
+    img = Image.new("RGB", (w, h), (245, 248, 252))
+    draw = ImageDraw.Draw(img)
+
+    # Top Header Band with Saffron and Green stripes
+    draw.rectangle([0, 0, w, 8], fill=(255, 120, 0))
+    draw.rectangle([0, 8, w, 75], fill=(24, 60, 115))
+    draw.rectangle([0, 75, w, 82], fill=(18, 136, 7))
+
+    f_head = get_font(20, bold=True)
+    f_sub = get_font(12)
+    draw.text((160, 16), "UNION OF INDIA - DRIVING LICENCE", fill=(255, 255, 255), font=f_head)
+    draw.text((160, 44), "TRANSPORT DEPARTMENT, GOVT. OF NCT OF DELHI", fill=(210, 230, 255), font=f_sub)
+
+    # Avatar (genuine portrait)
+    avatar = create_mock_avatar(165, 215, seed_color=(195, 140, 105), hair_color=(30, 20, 15), shirt_color=(45, 70, 110))
+    img.paste(avatar, (45, 115))
+
+    f_lbl = get_font(12, bold=True)
+    f_val = get_font(15, bold=True)
+
+    # DL Number: DL-0420180012345 (Delhi RTO 04, Year 2018, Serial 0012345)
+    draw.text((240, 105), "Licence No.", fill=(70, 90, 120), font=f_lbl)
+    draw.text((240, 125), "DL-0420180012345", fill=(20, 40, 80), font=get_font(22, bold=True))
+
+    fields = [
+        ("Name", "AMIT KUMAR SHARMA", (240, 170)),
+        ("Son/Wife/Daughter of", "RAMESH SHARMA", (240, 220)),
+        ("Date of Birth", "12/05/1990", (240, 270)),
+        ("Date of Issue", "15/06/2018", (460, 270)),
+        ("Valid Till (NT)", "14/06/2038", (240, 320)),
+        ("Authorisation to Drive", "LMV, MCWG", (460, 320)),
+    ]
+
+    for lbl, val, pos in fields:
+        draw.text(pos, lbl, fill=(80, 100, 130), font=f_lbl)
+        draw.text((pos[0], pos[1] + 18), val, fill=(15, 30, 60), font=f_val)
+
+    # QR Code
+    qr_payload = "DL:DL-0420180012345^AMIT KUMAR SHARMA^12/05/1990^15/06/2018^14/06/2038"
+    qr_img = generate_qr_image(qr_payload, 160)
+    img.paste(qr_img, (650, 125))
+
+    # Bottom footer
+    draw.rectangle([0, h - 35, w, h], fill=(225, 235, 245))
+    draw.text((280, h - 26), "SARATHI - Ministry of Road Transport and Highways", fill=(60, 80, 110), font=get_font(13, bold=True))
+    draw.rectangle([0, 0, w - 1, h - 1], outline=(140, 165, 195), width=2)
+
+    out_path = SAMPLE_DOCS_DIR / "sample_genuine_dl.jpg"
+    img.save(out_path, quality=94)
+    print(f"Generated: {out_path.name}")
+
+
+def make_tampered_dl():
+    """Generates tampered Indian Driving License with spliced photo and invalid state code."""
+    w, h = 860, 540
+    img = Image.new("RGB", (w, h), (245, 248, 252))
+    draw = ImageDraw.Draw(img)
+
+    # Top Header Band
+    draw.rectangle([0, 0, w, 8], fill=(255, 120, 0))
+    draw.rectangle([0, 8, w, 75], fill=(24, 60, 115))
+    draw.rectangle([0, 75, w, 82], fill=(18, 136, 7))
+
+    f_head = get_font(20, bold=True)
+    f_sub = get_font(12)
+    draw.text((160, 16), "UNION OF INDIA - DRIVING LICENCE", fill=(255, 255, 255), font=f_head)
+    draw.text((160, 44), "TRANSPORT DEPARTMENT, GOVT. OF NCT OF DELHI", fill=(210, 230, 255), font=f_sub)
+
+    # SPLICED AVATAR: Heavily re-compressed to trigger ELA
+    spliced_avatar = create_mock_avatar(165, 215, seed_color=(165, 110, 80), hair_color=(15, 15, 15), shirt_color=(95, 35, 35))
+    buf = io.BytesIO()
+    spliced_avatar.save(buf, format="JPEG", quality=35)
+    buf.seek(0)
+    recompressed = Image.open(buf)
+    img.paste(recompressed, (45, 115))
+
+    f_lbl = get_font(12, bold=True)
+    f_val = get_font(15, bold=True)
+
+    # TAMPERED DL Number: Invalid State Code XX (XX-0420180012345)
+    draw.text((240, 105), "Licence No.", fill=(70, 90, 120), font=f_lbl)
+    draw.text((240, 125), "XX-0420180012345", fill=(180, 20, 20), font=get_font(22, bold=True))
+
+    fields = [
+        ("Name", "VIKRAM RAJ MEHTA", (240, 170)),
+        ("Son/Wife/Daughter of", "RAMESH SHARMA", (240, 220)),
+        ("Date of Birth", "12/05/1990", (240, 270)),
+        ("Date of Issue", "15/06/2018", (460, 270)),
+        ("Valid Till (NT)", "14/06/2038", (240, 320)),
+        ("Authorisation to Drive", "LMV, MCWG", (460, 320)),
+    ]
+
+    for lbl, val, pos in fields:
+        draw.text(pos, lbl, fill=(80, 100, 130), font=f_lbl)
+        draw.text((pos[0], pos[1] + 18), val, fill=(15, 30, 60), font=f_val)
+
+    # QR Code
+    qr_payload = "DL:DL-0420180012345^AMIT KUMAR SHARMA^12/05/1990^15/06/2018^14/06/2038"
+    qr_img = generate_qr_image(qr_payload, 160)
+    img.paste(qr_img, (650, 125))
+
+    # Bottom footer
+    draw.rectangle([0, h - 35, w, h], fill=(225, 235, 245))
+    draw.text((280, h - 26), "SARATHI - Ministry of Road Transport and Highways", fill=(60, 80, 110), font=get_font(13, bold=True))
+    draw.rectangle([0, 0, w - 1, h - 1], outline=(180, 40, 40), width=2)
+
+    out_path = SAMPLE_DOCS_DIR / "sample_tampered_dl.jpg"
+    img.save(out_path, quality=94)
+    print(f"Generated: {out_path.name}")
+
+
 def generate_all_samples():
     """Generates all demonstration assets."""
     SAMPLE_DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -640,6 +754,8 @@ def generate_all_samples():
     make_tampered_aadhaar()
     make_genuine_pan()
     make_tampered_pan()
+    make_genuine_dl()
+    make_tampered_dl()
     make_sample_business_card()
     print("=" * 60)
     print("All demo assets successfully generated in:", SAMPLE_DOCS_DIR)

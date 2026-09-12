@@ -15,8 +15,9 @@ Outputs structured checklist: ✓ Valid | ⚠ Warning | ✕ Invalid
 """
 import re
 from datetime import datetime, date
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Union
 from app.database.db_manager import query_mock_database, check_duplicate_screenings
+from app.pipeline.dl_state_codes import VALID_STATE_CODES
 from app.config import (
     DOC_TYPE_PASSPORT,
     DOC_TYPE_VISA,
@@ -317,6 +318,243 @@ def validate_aadhaar_number(
     }
 
 
+def validate_dl(
+    dl_str: Optional[str],
+    dob: Optional[Union[str, date]] = None,
+    expiry_date: Optional[Union[str, date]] = None,
+    current_year: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Validates Indian Driving License (DL) format, state code, issue year, age, and expiry.
+    Format specification: SS-RRYYYYNNNNNNN or SSRR YYYYNNNNNNN (16 characters)
+    - SS = 2 uppercase letters (state code)
+    - RR = 2 digits (RTO code)
+    - YYYY = 4-digit issue year (19xx or 20xx)
+    - NNNNNNN = 7-digit serial number
+    """
+    if not dl_str:
+        return {
+            "valid": True,
+            "is_valid": True,
+            "status": "WARN",
+            "label": "⚠ Unreadable / Glare",
+            "message": "Driving License number not detected via OCR. Verify document surface or re-scan under even lighting.",
+            "checks_performed": [{
+                "check": "Driving License Number Presence",
+                "status": "WARN",
+                "detail": "Driving License number missing from OCR extraction."
+            }],
+            "failure_reasons": ["Driving License number not detected via OCR."],
+            "extracted_fields": {},
+            "state_code": None,
+            "state_name": None,
+            "rto_code": None,
+            "issue_year": None,
+            "serial_number": None,
+            "age_at_issue": None,
+            "expired": False
+        }
+
+    raw_str = str(dl_str).strip().upper()
+    base_regex = r"^(([A-Z]{2}[0-9]{2})( )|([A-Z]{2}-[0-9]{2}))((19|20)[0-9][0-9])[0-9]{7}$"
+
+    # Input normalization: strip spaces/hyphens inconsistency
+    clean_alphanumeric = re.sub(r"[^A-Z0-9]", "", raw_str)
+    norm_dl = None
+
+    if re.match(base_regex, raw_str):
+        norm_dl = raw_str
+    elif len(clean_alphanumeric) == 15 and clean_alphanumeric[:2].isalpha() and clean_alphanumeric[2:].isdigit():
+        # Reconstruct standard SS-RRYYYYNNNNNNN format
+        candidate = f"{clean_alphanumeric[:2]}-{clean_alphanumeric[2:]}"
+        if re.match(base_regex, candidate):
+            norm_dl = candidate
+
+    checks_performed: List[Dict[str, Any]] = []
+    failure_reasons: List[str] = []
+    extracted_fields: Dict[str, Any] = {}
+
+    # 1. Format validation (regex)
+    if not norm_dl:
+        failure_msg = f"Invalid Driving License format: '{raw_str}'. Must follow SS-RRYYYYNNNNNNN or SSRR YYYYNNNNNNN format (16 characters)."
+        failure_reasons.append(failure_msg)
+        checks_performed.append({
+            "check": "Driving License Regex Structure",
+            "status": "FAIL",
+            "detail": failure_msg
+        })
+        return {
+            "valid": False,
+            "is_valid": False,
+            "status": "FAIL",
+            "label": "✕ Invalid",
+            "message": failure_msg,
+            "checks_performed": checks_performed,
+            "failure_reasons": failure_reasons,
+            "extracted_fields": {},
+            "state_code": None,
+            "state_name": None,
+            "rto_code": None,
+            "issue_year": None,
+            "serial_number": None,
+            "age_at_issue": None,
+            "expired": False
+        }
+
+    checks_performed.append({
+        "check": "Driving License Regex Structure",
+        "status": "PASS",
+        "detail": f"Valid 16-character MoRTH DL format verified: '{norm_dl}'."
+    })
+
+    # Extract components
+    state_code = norm_dl[:2]
+    rto_code = norm_dl[3:5] if norm_dl[2] == "-" else norm_dl[2:4]
+    issue_year = int(norm_dl[5:9])
+    serial_number = norm_dl[9:]
+
+    extracted_fields["state_code"] = state_code
+    extracted_fields["rto_code"] = rto_code
+    extracted_fields["issue_year"] = issue_year
+    extracted_fields["serial_number"] = serial_number
+
+    # 2. State Code validation
+    if state_code not in VALID_STATE_CODES:
+        failure_msg = f"Invalid state code '{state_code}' in DL '{norm_dl}'. Not recognized in official MoRTH State/UT directory."
+        failure_reasons.append(failure_msg)
+        checks_performed.append({
+            "check": "State Code Jurisdiction",
+            "status": "FAIL",
+            "detail": failure_msg
+        })
+        state_name = "Unknown State"
+    else:
+        state_name = VALID_STATE_CODES[state_code]
+        extracted_fields["state_name"] = state_name
+        checks_performed.append({
+            "check": "State Code Jurisdiction",
+            "status": "PASS",
+            "detail": f"State code '{state_code}' confirmed: {state_name}."
+        })
+
+    # 3. Issue Year Sanity Check
+    curr_year = current_year if current_year is not None else max(date.today().year, 2026)
+    if issue_year > curr_year:
+        failure_msg = f"Impossible future issue year '{issue_year}' in DL '{norm_dl}' (current year: {curr_year})."
+        failure_reasons.append(failure_msg)
+        checks_performed.append({
+            "check": "Issue Year Sanity",
+            "status": "FAIL",
+            "detail": failure_msg
+        })
+    elif issue_year < 1980:
+        failure_msg = f"Suspicious pre-1980 issue year '{issue_year}' in DL '{norm_dl}' (predates computerized DL standards)."
+        failure_reasons.append(failure_msg)
+        checks_performed.append({
+            "check": "Issue Year Sanity",
+            "status": "FAIL",
+            "detail": failure_msg
+        })
+    else:
+        checks_performed.append({
+            "check": "Issue Year Sanity",
+            "status": "PASS",
+            "detail": f"Issue year {issue_year} verified within valid historical window [1980 - {curr_year}]."
+        })
+
+    # 4. Age Check (if DOB available from OCR)
+    age_at_issue = None
+    if dob:
+        dob_dt = parse_date_universal(dob) if isinstance(dob, str) else dob
+        if dob_dt and isinstance(dob_dt, (datetime, date)):
+            age_at_issue = issue_year - dob_dt.year
+            extracted_fields["age_at_issue"] = age_at_issue
+            if age_at_issue < 18:
+                failure_msg = f"Underage issuance violation: Holder was {age_at_issue} years old at issue year {issue_year} (minimum statutory age is 18)."
+                failure_reasons.append(failure_msg)
+                checks_performed.append({
+                    "check": "Minimum Age at Issuance",
+                    "status": "FAIL",
+                    "detail": failure_msg
+                })
+            else:
+                checks_performed.append({
+                    "check": "Minimum Age at Issuance",
+                    "status": "PASS",
+                    "detail": f"Age requirement met: Holder was {age_at_issue} years old at issuance."
+                })
+        else:
+            checks_performed.append({
+                "check": "Minimum Age at Issuance",
+                "status": "WARN",
+                "detail": "DOB format could not be parsed; age check skipped gracefully."
+            })
+    else:
+        checks_performed.append({
+            "check": "Minimum Age at Issuance",
+            "status": "WARN",
+            "detail": "DOB not available from OCR; age check skipped gracefully (not verified)."
+        })
+
+    # 5. Expiry Check (if expiry date is available from OCR)
+    is_expired = False
+    if expiry_date:
+        exp_dt = parse_date_universal(expiry_date) if isinstance(expiry_date, str) else expiry_date
+        if exp_dt and isinstance(exp_dt, (datetime, date)):
+            today_ref = date(2026, 3, 9)
+            if exp_dt < today_ref:
+                is_expired = True
+                checks_performed.append({
+                    "check": "Driving License Expiry Status",
+                    "status": "FAIL",
+                    "detail": f"DOCUMENT EXPIRED! Driving License expired on {expiry_date}."
+                })
+            else:
+                checks_performed.append({
+                    "check": "Driving License Expiry Status",
+                    "status": "PASS",
+                    "detail": f"Driving License active until {expiry_date}."
+                })
+
+    extracted_fields["expired"] = is_expired
+
+    is_valid = (len(failure_reasons) == 0)
+    if not is_valid:
+        status = "FAIL"
+        label = "✕ Invalid"
+        message = failure_reasons[0]
+    elif is_expired:
+        status = "WARN"
+        label = "⚠ Expired"
+        message = f"Driving License '{norm_dl}' format verified ({state_name}), but document is EXPIRED."
+    else:
+        status = "PASS"
+        label = "✓ Valid"
+        message = f"Valid Driving License '{norm_dl}' registered to {state_name} (Issue Year: {issue_year})."
+
+    return {
+        "valid": is_valid,
+        "is_valid": is_valid,
+        "status": status,
+        "label": label,
+        "message": message,
+        "checks_performed": checks_performed,
+        "failure_reasons": failure_reasons,
+        "extracted_fields": extracted_fields,
+        "state_code": state_code,
+        "state_name": state_name,
+        "rto_code": rto_code,
+        "issue_year": issue_year,
+        "serial_number": serial_number,
+        "age_at_issue": age_at_issue,
+        "expired": is_expired
+    }
+
+
+validate_dl_number = validate_dl
+validate_driving_license = validate_dl
+
+
 # ==============================================================================
 # 4. MASTER VALIDATION CONTROLLER
 # ==============================================================================
@@ -419,6 +657,14 @@ def validate_document_rules(
                 "detail": "FAILED: Missing ICAO Doc 9303 MRZ lines and passport serial number."
             })
             total_failures += 2
+        elif claimed_type == DOC_TYPE_DRIVING_LICENSE:
+            checklist.append({
+                "check": "Driving License Format & State Jurisdiction",
+                "status": "FAIL",
+                "badge": "✕ Invalid",
+                "detail": "FAILED: Missing statutory 16-character MoRTH Driving License syntax and state code on non-identity media."
+            })
+            total_failures += 2
         else:
             checklist.append({
                 "check": "Statutory Document Number & Checksum",
@@ -490,6 +736,21 @@ def validate_document_rules(
                 "detail": "Visa document number could not be detected."
             })
             total_failures += 1
+
+    elif doc_type == DOC_TYPE_DRIVING_LICENSE:
+        dob_val = fields.get("dob")
+        exp_val = fields.get("expiry_date") or fields.get("valid_until")
+        res_num = validate_dl(doc_num, dob=dob_val, expiry_date=exp_val)
+        checklist.append({
+            "check": "Driving License Format & State Jurisdiction",
+            "status": res_num["status"],
+            "badge": res_num["label"],
+            "detail": res_num["message"]
+        })
+        if res_num["status"] == "FAIL":
+            total_failures += 1
+        elif res_num["status"] == "WARN":
+            total_warnings += 1
 
     # 3. DOB & Passenger Age
     if is_mismatch or is_non_id:
